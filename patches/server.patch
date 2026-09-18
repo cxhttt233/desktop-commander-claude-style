@@ -1,0 +1,64 @@
+--- a/dist/server.js
++++ b/dist/server.js
+@@ -1158,6 +1158,49 @@
+     }
+ });
+ import * as handlers from './handlers/index.js';
++import { measureArgs, measureResult } from './dc-traffic-meter.js';
++// dc-token-odometer-v0.2.50-fixed-r9-multimodal
++const dcProcessTokenMeter = {
++    inputTokens: 0, outputTokens: 0, calls: 0,
++    inputBytes: 0, outputBytes: 0,
++    sessionInputTokens: 0, sessionOutputTokens: 0, sessionCalls: 0,
++    sessionInputBytes: 0, sessionOutputBytes: 0,
++    imageInCount: 0, imageInBytes: 0, imageOutCount: 0, imageOutBytes: 0,
++    audioInCount: 0, audioInBytes: 0, audioOutCount: 0, audioOutBytes: 0,
++    blobInCount: 0, blobInBytes: 0, blobOutCount: 0, blobOutBytes: 0,
++    binaryInCount: 0, binaryInBytes: 0, binaryOutCount: 0, binaryOutBytes: 0,
++    linkInCount: 0, linkOutCount: 0,
++    sessionStarted: Date.now(), lastActivity: Date.now(), approximate: true
++};
++function dcAddMetrics(direction, metrics) {
++    const suffix = direction === 'in' ? 'In' : 'Out';
++    for (const kind of ['image','audio','blob','binary']) {
++        const countField = kind + suffix + 'Count';
++        const bytesField = kind + suffix + 'Bytes';
++        dcProcessTokenMeter[countField] += metrics[kind + 'Count'] || 0;
++        dcProcessTokenMeter[bytesField] += metrics[kind + 'Bytes'] || 0;
++    }
++    dcProcessTokenMeter['link' + suffix + 'Count'] += metrics.linkCount || 0;
++}
++async function dcRecordTokenTraffic(args, result) {
++    const input = measureArgs(args);
++    const output = measureResult(result);
++    dcProcessTokenMeter.inputTokens += input.textTokens;
++    dcProcessTokenMeter.outputTokens += output.textTokens;
++    dcProcessTokenMeter.inputBytes += Buffer.byteLength(JSON.stringify(args ?? ''), 'utf8');
++    dcProcessTokenMeter.outputBytes += Buffer.byteLength(JSON.stringify(result?.content ?? result ?? ''), 'utf8');
++    dcProcessTokenMeter.calls += 1;
++    dcProcessTokenMeter.sessionInputTokens = dcProcessTokenMeter.inputTokens;
++    dcProcessTokenMeter.sessionOutputTokens = dcProcessTokenMeter.outputTokens;
++    dcProcessTokenMeter.sessionInputBytes = dcProcessTokenMeter.inputBytes;
++    dcProcessTokenMeter.sessionOutputBytes = dcProcessTokenMeter.outputBytes;
++    dcProcessTokenMeter.sessionCalls = dcProcessTokenMeter.calls;
++    dcAddMetrics('in', input);
++    dcAddMetrics('out', output);
++    dcProcessTokenMeter.lastActivity = Date.now();
++    return { ...dcProcessTokenMeter };
++}
++
+ server.setRequestHandler(CallToolRequestSchema, async (request) => {
+     const args = request.params.arguments;
+     // Calls fired programmatically by the widget UIs (file preview, config
+@@ -1529,6 +1572,11 @@
+         catch {
+             // Never let the advisory warning break an otherwise-successful call.
+         }
++        try {
++            const dcTokenMeter = await dcRecordTokenTraffic(args, result);
++            result._meta = { ...(result._meta || {}), dcTokenMeter };
++        }
++        catch { /* meter failure must never break a tool call */ }
+         return result;
+     }
+     catch (error) {

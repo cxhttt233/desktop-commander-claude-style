@@ -1,0 +1,5 @@
+claude-spinner-verbs.json
+*.bak
+*.before-*
+.DS_Store
+Thumbs.db
