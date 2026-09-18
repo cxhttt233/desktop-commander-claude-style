@@ -467,10 +467,21 @@ export class DCAutoSpawnManager {
 
     async spawnWorkerAndWait(agent) {
         const workerPath = fileURLToPath(new URL('./dc-auto-spawn-worker.js', import.meta.url));
+        const workerLogPath = path.join(agent.profileDir, 'worker-startup.log');
+        agent.workerLogPath = workerLogPath;
         const ready = new Promise((resolve, reject) => {
-            const timer = setTimeout(() => {
+            const timer = setTimeout(async () => {
                 this.pendingWorkers.delete(agent.secret);
-                reject(new Error(`Worker ${agent.deviceName} did not connect in time`));
+                let detail = '';
+                try {
+                    const log = await fs.readFile(workerLogPath, 'utf8');
+                    detail = log.trim().slice(-4000);
+                }
+                catch {}
+                reject(new Error(
+                    `Worker ${agent.deviceName} did not connect in time` +
+                    (detail ? `\nWorker startup log:\n${detail}` : '')
+                ));
             }, WORKER_CONNECT_TIMEOUT_MS);
             this.pendingWorkers.set(agent.secret, {
                 agent,
@@ -493,8 +504,24 @@ export class DCAutoSpawnManager {
 
         if (process.platform === 'win32') {
             const psq = (v) => `'${String(v).replaceAll("'", "''")}'`;
-            const argLine = args.map((v) => `"${String(v).replaceAll('"', '\\"')}"`).join(' ');
-            const command = `Start-Process -FilePath ${psq(process.execPath)} -ArgumentList ${psq(argLine)} -WindowStyle Normal`;
+            const launcherPath = path.join(agent.profileDir, 'worker-launch.ps1');
+            const launcher = [
+                "$ErrorActionPreference = 'Continue'",
+                `$Host.UI.RawUI.WindowTitle = ${psq(`Desktop Commander · ${agent.deviceName}`)}`,
+                `Start-Transcript -Path ${psq(workerLogPath)} -Append | Out-Null`,
+                `& ${psq(process.execPath)} ${args.map(psq).join(' ')}`,
+                '$exitCode = $LASTEXITCODE',
+                'Stop-Transcript | Out-Null',
+                "if ($exitCode -ne 0) {",
+                "    Write-Host ('Worker exited with code ' + $exitCode) -ForegroundColor Red",
+                "    Write-Host 'Window will remain open for diagnostics.' -ForegroundColor Yellow",
+                '    Start-Sleep -Seconds 60',
+                '}',
+                'exit $exitCode'
+            ].join('\r\n');
+            await fs.writeFile(launcherPath, launcher, 'utf8');
+
+            const command = `Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',${psq(launcherPath)}) -WindowStyle Normal`;
             const child = spawn('powershell.exe', ['-NoProfile', '-Command', command], {
                 windowsHide: true,
                 detached: true,
