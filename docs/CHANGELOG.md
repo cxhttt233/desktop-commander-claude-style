@@ -1,5 +1,16 @@
 # Changelog
 
+## R17
+
+- Add optional gateway mode for multi-conversation Desktop Commander use without changing the ChatGPT plugin.
+- A first tool call to the gateway allocates a temporary device row and returns a dedicated `deviceId`; the caller retries on that device and keeps using it for the conversation.
+- Open one independent visible Desktop Commander window per temporary device, with its own Claude-style activity/status display.
+- Keep one authenticated Remote session, one Realtime channel, and one local MCP engine in the gateway; child windows do not copy or refresh auth tokens.
+- Route all temporary-device calls through one 500 ms pending-call poller and dispatch them concurrently through the shared MCP client.
+- Keep real multi-device behavior unchanged unless `DC_AUTO_SPAWN=true` is explicitly enabled on a device.
+- Delete temporary devices, windows, and profile metadata after 24 hours without tool activity; do not manage worktrees or repositories.
+- Clean up orphaned temporary devices on gateway restart and delete a temporary device if its window crashes.
+
 ## R16
 
 - Start `↓` input-byte and call-count animation as soon as the tool call reaches the remote device.

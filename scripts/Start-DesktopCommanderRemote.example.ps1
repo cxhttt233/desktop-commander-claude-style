@@ -23,6 +23,9 @@ if (-not $refresh -and (Test-Path $claudeExe)) {
 }
 if ($refresh -and (Test-Path $extractor)) { python $extractor *> $null }
 
+# Optional gateway mode: allocate one temporary DC device/window per AI conversation.
+$env:DC_AUTO_SPAWN = 'true'
+
 Write-Host 'Desktop Commander Remote' -ForegroundColor Cyan
 Write-Host 'Press Ctrl+C or close this window to stop.' -ForegroundColor DarkGray
 & $node (Join-Path $packageRoot 'dist\index.js') remote

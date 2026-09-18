@@ -88,6 +88,45 @@ if "./dc-terminal-status.js" not in device:
     new = "        catch (error) {\n            dcTerminalStatus.finishCall();\n            console.error(`❌ Tool call ${tool_name} failed:`, error.message);"
     device = replace_once(device, old, new, 'device error')
 
+if "./dc-auto-spawn.js" not in device:
+    old = "import { summarizeToolResult } from './dc-content-summary.js';\n"
+    new = old + "import { DCAutoSpawnManager } from './dc-auto-spawn.js';\n"
+    device = replace_once(device, old, new, 'auto-spawn import')
+
+    old = "        this.remoteChannel = new RemoteChannel();\n"
+    new = old + "        this.autoSpawn = null;\n"
+    device = replace_once(device, old, new, 'auto-spawn constructor')
+
+    old = "            await this.remoteChannel.registerDevice(await this.desktop.listClientTools(), this.deviceId, deviceName, (payload) => this.handleNewToolCall(payload));\n"
+    new = old + "            this.autoSpawn = new DCAutoSpawnManager(this.remoteChannel, this.deviceId, this.desktop);\n            await this.autoSpawn.start();\n"
+    device = replace_once(device, old, new, 'auto-spawn start')
+
+    old = "            let result;\n            dcTerminalStatus.beginCall(tool_args);\n"
+    new = (
+        "            if (this.autoSpawn?.shouldRedirect(tool_name)) {\n"
+        "                const redirect = await this.autoSpawn.allocateRedirect(call_id);\n"
+        "                console.log(`🧩 Assigned isolated DC for call ${call_id}`);\n"
+        "                await this.remoteChannel.updateCallResult(call_id, 'completed', redirect);\n"
+        "                await this.remoteChannel.notifyResult(call_id);\n"
+        "                return;\n"
+        "            }\n"
+        "            let result;\n"
+        "            dcTerminalStatus.beginCall(tool_args);\n"
+    )
+    device = replace_once(device, old, new, 'auto-spawn redirect')
+
+    old = "        try {\n            // Stop heartbeat first to prevent new operations\n"
+    new = (
+        "        try {\n"
+        "            if (this.autoSpawn) {\n"
+        "                console.log('  → Stopping auto-spawn agents...');\n"
+        "                await this.autoSpawn.shutdown();\n"
+        "                console.log('  ✓ Auto-spawn agents stopped');\n"
+        "            }\n"
+        "            // Stop heartbeat first to prevent new operations\n"
+    )
+    device = replace_once(device, old, new, 'auto-spawn shutdown')
+
 server_path.write_text(server, encoding='utf-8', newline='\n')
 device_path.write_text(device, encoding='utf-8', newline='\n')
 print('ANCHOR_PATCH_OK')

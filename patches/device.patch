@@ -1,15 +1,30 @@
 --- a/dist/remote-device/device.js
 +++ b/dist/remote-device/device.js
-@@ -7,6 +7,8 @@
+@@ -7,6 +7,9 @@
  import fs from 'fs/promises';
  import path from 'path';
  import { captureRemote } from '../utils/capture.js';
 +import { dcTerminalStatus } from './dc-terminal-status.js';
 +import { summarizeToolResult } from './dc-content-summary.js';
++import { DCAutoSpawnManager } from './dc-auto-spawn.js';
  /**
   * How many recently-handled call ids to remember for duplicate-delivery
   * suppression. The two transports deliver a call within MILLISECONDS of each
-@@ -163,6 +165,7 @@
+@@ -26,6 +29,7 @@
+         this.seenCallIds = new Set();
+         this.baseServerUrl = process.env.MCP_SERVER_URL || 'https://mcp.desktopcommander.app';
+         this.remoteChannel = new RemoteChannel();
++        this.autoSpawn = null;
+         this.deviceId = undefined;
+         this.isShuttingDown = false;
+         this.configPath = getRemoteDeviceConfigPath();
+@@ -159,10 +163,13 @@
+             const deviceName = os.hostname();
+             // Register as device
+             await this.remoteChannel.registerDevice(await this.desktop.listClientTools(), this.deviceId, deviceName, (payload) => this.handleNewToolCall(payload));
++            this.autoSpawn = new DCAutoSpawnManager(this.remoteChannel, this.deviceId, this.desktop);
++            await this.autoSpawn.start();
+             console.log('✅ Device ready:');
              console.log(`   - User:         ${this.remoteChannel.user.email}`);
              console.log(`   - Device ID:    ${this.deviceId}`);
              console.log(`   - Device Name:  ${deviceName}`);
@@ -17,15 +32,23 @@
              // Keep process alive
              this.remoteChannel.startHeartbeat(this.deviceId);
          }
-@@ -350,6 +353,7 @@
+@@ -349,7 +356,15 @@
+                 // markCallExecuting already logged the duplicate-delivery skip.
                  return;
              }
++            if (this.autoSpawn?.shouldRedirect(tool_name)) {
++                const redirect = await this.autoSpawn.allocateRedirect(call_id);
++                console.log(`🧩 Assigned isolated DC for call ${call_id}`);
++                await this.remoteChannel.updateCallResult(call_id, 'completed', redirect);
++                await this.remoteChannel.notifyResult(call_id);
++                return;
++            }
              let result;
 +            dcTerminalStatus.beginCall(tool_args);
              // Handle 'ping' tool specially
              if (tool_name === 'ping') {
                  result = {
-@@ -377,13 +381,15 @@
+@@ -377,13 +392,15 @@
                  // Execute other tools using desktop integration
                  result = await this.desktop.callClientTool(tool_name, tool_args, metadata);
              }
@@ -42,3 +65,15 @@
              console.error(`❌ Tool call ${tool_name} failed:`, error.message);
              // The failure path must not fail: this method's promise is discarded
              // at every call site, so a throw here becomes an unhandled rejection
+@@ -407,6 +424,11 @@
+         console.log('\n🛑 Shutting down device...');
+         console.debug('[DEBUG] Shutdown initiated for device:', this.deviceId);
+         try {
++            if (this.autoSpawn) {
++                console.log('  → Stopping auto-spawn agents...');
++                await this.autoSpawn.shutdown();
++                console.log('  ✓ Auto-spawn agents stopped');
++            }
+             // Stop heartbeat first to prevent new operations
+             console.log('  → Stopping heartbeat...');
+             console.debug('[DEBUG] Calling stopHeartbeat()');
