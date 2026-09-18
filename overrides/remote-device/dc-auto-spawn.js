@@ -511,10 +511,9 @@ export class DCAutoSpawnManager {
 
         if (process.platform === 'win32') {
             const psq = (v) => `'${String(v).replaceAll("'", "''")}'`;
-            const launcherPath = path.join(agent.profileDir, 'worker-launch.ps1');
             const launcher = [
                 "$ErrorActionPreference = 'Continue'",
-                `$Host.UI.RawUI.WindowTitle = ${psq(`Desktop Commander · ${agent.deviceName}`)}`,
+                `$Host.UI.RawUI.WindowTitle = ${psq(`Desktop Commander - ${agent.deviceName}`)}`,
                 `Start-Transcript -Path ${psq(workerLogPath)} -Append | Out-Null`,
                 `& ${psq(process.execPath)} ${args.map(psq).join(' ')}`,
                 '$exitCode = $LASTEXITCODE',
@@ -526,16 +525,22 @@ export class DCAutoSpawnManager {
                 '}',
                 'exit $exitCode'
             ].join('\r\n');
-            await fs.writeFile(launcherPath, launcher, 'utf8');
-
+            await fs.writeFile(workerLogPath, `[gateway] launching worker at ${new Date().toISOString()}\r\n`, 'utf8');
+            const encodedCommand = Buffer.from(launcher, 'utf16le').toString('base64');
             const child = spawn('powershell.exe', [
                 '-NoProfile',
                 '-ExecutionPolicy', 'Bypass',
-                '-File', launcherPath
+                '-EncodedCommand', encodedCommand
             ], {
                 windowsHide: false,
                 detached: true,
                 stdio: 'ignore'
+            });
+            child.on('error', (error) => {
+                fs.appendFile(workerLogPath, `[gateway] spawn error: ${error.message}\r\n`, 'utf8').catch(() => {});
+            });
+            child.on('exit', (code, signal) => {
+                fs.appendFile(workerLogPath, `[gateway] launcher exit code=${code} signal=${signal || ''}\r\n`, 'utf8').catch(() => {});
             });
             child.unref();
         }
