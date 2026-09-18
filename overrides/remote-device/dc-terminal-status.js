@@ -26,7 +26,7 @@ class DCTerminalStatusLine {
         this.busy = 0;
         this.settling = false;
         this.frame = 0;
-        this.frames = ['✳︎','✻︎','✶︎','✻︎'];
+        this.frames = ['✻','✽','✶','✳','✢','✳','✶','✽'];
         this.lastFrameAt = 0;
         this.verbs = this.loadVerbs();
         this.currentVerb = 'DC';
@@ -60,9 +60,11 @@ class DCTerminalStatusLine {
 
     pickVerb() {
         if (!this.verbs.length) return 'Working';
-        let next = this.verbs[Math.floor(Math.random() * this.verbs.length)];
-        if (this.verbs.length > 1 && next === this.currentVerb) {
-            next = this.verbs[(this.verbs.indexOf(next) + 1) % this.verbs.length];
+        const short = this.verbs.filter(v => v.length <= 8);
+        const pool = short.length ? short : this.verbs;
+        let next = pool[Math.floor(Math.random() * pool.length)];
+        if (pool.length > 1 && next === this.currentVerb) {
+            next = pool[(pool.indexOf(next) + 1) % pool.length];
         }
         return next;
     }
@@ -108,13 +110,13 @@ class DCTerminalStatusLine {
         return {
             mark: 2,
             status: 4,
-            statusWidth: 15,
-            downArrow: 20,
-            downValue: 21,
-            upArrow: 29,
-            upValue: 30,
-            dot: 38,
-            calls: 39,
+            statusWidth: 8,
+            downArrow: 13,
+            downValue: 15,
+            upArrow: 23,
+            upValue: 25,
+            dot: 33,
+            calls: 35,
         };
     }
 
@@ -150,7 +152,7 @@ class DCTerminalStatusLine {
     }
 
     currentMark() {
-        return this.isVisuallyBusy() ? this.frames[this.frame] : '✳︎';
+        return this.isVisuallyBusy() ? this.frames[this.frame] : '✻';
     }
 
     writeMark(force = false) {
@@ -162,7 +164,7 @@ class DCTerminalStatusLine {
     }
 
     currentStatus() {
-        return this.isVisuallyBusy() ? this.currentVerb : 'DC';
+        return this.isVisuallyBusy() ? this.currentVerb : 'DC idle';
     }
 
     writeStatus(force = false) {
@@ -269,8 +271,9 @@ class DCTerminalStatusLine {
         this.animationStarted = Date.now();
         this.animating = true;
         this.settling = this.busy === 0;
-        if (this.settling && this.nextVerbAt === 0) {
-            this.nextVerbAt = Date.now() + 1800 + Math.floor(Math.random() * 1600);
+        if (this.settling) {
+            this.currentVerb = this.pickVerb();
+            this.nextVerbAt = Date.now() + 700 + Math.floor(Math.random() * 500);
         }
         this.writeMark(true);
         this.writeStatus(true);
@@ -287,7 +290,9 @@ class DCTerminalStatusLine {
         }
         if (visualBusy && now >= this.nextVerbAt) {
             this.currentVerb = this.pickVerb();
-            this.nextVerbAt = now + 1800 + Math.floor(Math.random() * 1600);
+            this.nextVerbAt = this.settling
+                ? now + 700 + Math.floor(Math.random() * 500)
+                : now + 1800 + Math.floor(Math.random() * 1600);
             this.writeStatus();
         }
 

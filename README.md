@@ -5,8 +5,8 @@ Public patch set for **Desktop Commander 0.2.50** on Windows.
 It adds a compact Claude Code-inspired terminal status line, Desktop Commander tool-traffic counters, multimodal/Base64 log compaction, and a faster Remote launcher.
 
 ```text
-✳ DC             ↓1.07K  ↑8.42K  ·13
-✻ Pondering      ↓1.12K  ↑9.03K  ·14
+✻ DC idle  ↓ 1.07K  ↑ 8.42K  · 13
+✽ Ponder   ↓ 1.12K  ↑ 9.03K  · 14
 ```
 
 ## Features

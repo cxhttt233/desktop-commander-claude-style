@@ -1,5 +1,13 @@
 # Changelog
 
+## R14
+
+- Removed Unicode variation selectors that rendered as a boxed glyph in some Windows terminals.
+- Compacted the status field to 8 columns; arrows and counters now sit much closer to the activity label.
+- Added a safety column after each Unicode arrow so 2-cell arrow rendering cannot be overwritten by the counter.
+- Counter settling now triggers an immediate verb change and uses faster verb cadence while numbers animate.
+- Idle state now reads `DC idle`; activity words are selected from the short Claude-style pool to keep the line compact.
+
 ## R13
 
 - Compact fixed-column status line.
