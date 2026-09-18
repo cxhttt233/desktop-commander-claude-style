@@ -103,7 +103,7 @@ if "./dc-auto-spawn.js" not in device:
 
     old = "            let result;\n            dcTerminalStatus.beginCall(tool_args);\n"
     new = (
-        "            if (this.autoSpawn?.shouldRedirect(tool_name)) {\n"
+        "            if (this.autoSpawn?.shouldRedirect(tool_name, tool_args)) {\n"
         "                const redirect = await this.autoSpawn.allocateRedirect(call_id);\n"
         "                console.log(`🧩 Assigned isolated DC for call ${call_id}`);\n"
         "                await this.remoteChannel.updateCallResult(call_id, 'completed', redirect);\n"
@@ -131,6 +131,11 @@ old_auto_ctor = "            this.autoSpawn = new DCAutoSpawnManager(this.remote
 new_auto_ctor = "            this.autoSpawn = new DCAutoSpawnManager(this.remoteChannel, this.deviceId, this.desktop, this.baseServerUrl);\n"
 if old_auto_ctor in device:
     device = replace_once(device, old_auto_ctor, new_auto_ctor, 'auto-spawn constructor migration')
+
+old_redirect_call = "            if (this.autoSpawn?.shouldRedirect(tool_name)) {\n"
+new_redirect_call = "            if (this.autoSpawn?.shouldRedirect(tool_name, tool_args)) {\n"
+if old_redirect_call in device:
+    device = replace_once(device, old_redirect_call, new_redirect_call, 'auto-spawn maintenance migration')
 
 server_path.write_text(server, encoding='utf-8', newline='\n')
 device_path.write_text(device, encoding='utf-8', newline='\n')
