@@ -22,7 +22,7 @@
              const deviceName = os.hostname();
              // Register as device
              await this.remoteChannel.registerDevice(await this.desktop.listClientTools(), this.deviceId, deviceName, (payload) => this.handleNewToolCall(payload));
-+            this.autoSpawn = new DCAutoSpawnManager(this.remoteChannel, this.deviceId, this.desktop);
++            this.autoSpawn = new DCAutoSpawnManager(this.remoteChannel, this.deviceId, this.desktop, this.baseServerUrl);
 +            await this.autoSpawn.start();
              console.log('✅ Device ready:');
              console.log(`   - User:         ${this.remoteChannel.user.email}`);

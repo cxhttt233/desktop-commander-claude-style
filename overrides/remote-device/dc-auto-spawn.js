@@ -5,13 +5,13 @@ import fs from 'fs/promises';
 import crypto from 'crypto';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 import { VERSION } from '../version.js';
 import { summarizeToolResult } from './dc-content-summary.js';
 
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const WORKER_CONNECT_TIMEOUT_MS = 20000;
-const POLL_INTERVAL_MS = 500;
 const HEARTBEAT_INTERVAL_MS = 15 * 1000;
 const MANAGED_CAPABILITY = 'dc_auto_spawn_v1';
 
@@ -24,10 +24,11 @@ function sleep(ms) {
 }
 
 export class DCAutoSpawnManager {
-    constructor(remoteChannel, parentDeviceId, desktop) {
+    constructor(remoteChannel, parentDeviceId, desktop, baseServerUrl = 'https://mcp.desktopcommander.app') {
         this.remoteChannel = remoteChannel;
         this.parentDeviceId = parentDeviceId;
         this.desktop = desktop;
+        this.baseServerUrl = baseServerUrl;
         this.enabled = process.env.DC_AUTO_SPAWN === 'true';
         this.ttlMs = Math.max(60000, Number(process.env.DC_AUTO_SPAWN_TTL_MS) || DEFAULT_TTL_MS);
         this.agents = new Map();
@@ -36,8 +37,8 @@ export class DCAutoSpawnManager {
         this.port = null;
         this.cleanupTimer = null;
         this.heartbeatTimer = null;
-        this.pollTimer = null;
-        this.pollInFlight = false;
+        this.supabaseUrl = null;
+        this.supabaseKey = null;
         this.stopping = false;
         this.profileRoot = path.join(os.homedir(), '.desktop-commander-device', 'auto');
     }
@@ -53,16 +54,13 @@ export class DCAutoSpawnManager {
             throw new Error('Auto-spawn requires an authenticated RemoteChannel');
         }
         await fs.mkdir(this.profileRoot, { recursive: true });
+        await this.loadRealtimeConfig();
         await this.cleanupOrphans();
         await this.startServer();
         this.cleanupTimer = setInterval(() => {
             this.cleanupExpired().catch((e) => console.error('[auto-spawn] cleanup failed:', e?.message));
         }, CLEANUP_INTERVAL_MS);
         this.cleanupTimer.unref?.();
-        this.pollTimer = setInterval(() => {
-            this.pollPendingCalls().catch((e) => console.error('[auto-spawn] poll failed:', e?.message));
-        }, POLL_INTERVAL_MS);
-        this.pollTimer.unref?.();
         this.heartbeatTimer = setInterval(() => {
             this.heartbeatAgents().catch((e) => console.error('[auto-spawn] heartbeat failed:', e?.message));
         }, HEARTBEAT_INTERVAL_MS);
@@ -98,6 +96,9 @@ export class DCAutoSpawnManager {
             secret,
             socket: null,
             pid: null,
+            realtimeClient: null,
+            channel: null,
+            accessToken: null,
             lastActiveAt: now,
             seenCallIds: new Set(),
             activeCalls: new Set(),
@@ -120,6 +121,7 @@ export class DCAutoSpawnManager {
                 ttlMs: this.ttlMs
             }, null, 2), 'utf8');
 
+            await this.connectAgentPresence(agent);
             this.agents.set(agent.deviceId, agent);
             await this.spawnWorkerAndWait(agent);
             console.log(`🆕 Auto-spawned ${agent.deviceName} (${agent.deviceId})`);
@@ -173,33 +175,158 @@ export class DCAutoSpawnManager {
         return data;
     }
 
-    async pollPendingCalls() {
-        if (this.stopping || this.pollInFlight || this.agents.size === 0)
+    async loadRealtimeConfig() {
+        const response = await fetch(`${this.baseServerUrl}/api/mcp-info`);
+        if (!response.ok)
+            throw new Error(`Failed to fetch Supabase config: ${response.statusText}`);
+        const config = await response.json();
+        this.supabaseUrl = config.supabaseUrl;
+        this.supabaseKey = config.supabasePublishableKey;
+        if (!this.supabaseUrl || !this.supabaseKey)
+            throw new Error('Auto-spawn Supabase config is incomplete');
+    }
+
+    async currentAccessToken() {
+        const cached = this.remoteChannel?.lastKnownSession?.access_token;
+        if (cached)
+            return cached;
+        const { data, error } = await this.remoteChannel.client.auth.getSession();
+        if (error)
+            throw error;
+        const token = data?.session?.access_token;
+        if (!token)
+            throw new Error('Auto-spawn could not obtain the parent access token');
+        return token;
+    }
+
+    async connectAgentPresence(agent) {
+        const accessToken = await this.currentAccessToken();
+        const realtimeClient = createClient(this.supabaseUrl, this.supabaseKey, {
+            auth: {
+                persistSession: false,
+                autoRefreshToken: false,
+                detectSessionInUrl: false
+            }
+        });
+        await realtimeClient.realtime.setAuth(accessToken);
+
+        const userId = this.remoteChannel.user.id;
+        const channel = realtimeClient.channel(`user:${userId}`, {
+            config: {
+                private: true,
+                broadcast: { ack: true },
+                presence: { key: agent.deviceId, enabled: true }
+            }
+        });
+        agent.realtimeClient = realtimeClient;
+        agent.channel = channel;
+        agent.accessToken = accessToken;
+
+        channel.on('broadcast', { event: 'new_call' }, ({ payload }) => {
+            if (payload?.device_id !== agent.deviceId || !payload?.call_id)
+                return;
+            void this.handleDoorbell(agent, payload.call_id).catch((e) => {
+                console.error(`[auto-spawn:${agent.shortId}] doorbell failed:`, e?.message);
+            });
+        });
+
+        await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error('Auto-spawn presence subscribe timeout')), 15000);
+            channel.subscribe(async (status, err) => {
+                if (status === 'SUBSCRIBED') {
+                    try {
+                        const tracked = await channel.track({
+                            device_id: agent.deviceId,
+                            device_name: agent.deviceName,
+                            app_version: VERSION,
+                            platform: process.platform
+                        });
+                        if (tracked !== 'ok')
+                            throw new Error(`presence track returned ${tracked}`);
+                        clearTimeout(timer);
+                        resolve();
+                    }
+                    catch (e) {
+                        clearTimeout(timer);
+                        reject(e);
+                    }
+                }
+                else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                    clearTimeout(timer);
+                    reject(err || new Error(`Auto-spawn channel ${status}`));
+                }
+            });
+        });
+
+        const marker = {
+            parent_device_id: this.parentDeviceId,
+            instance_id: agent.instanceId,
+            ttl_ms: this.ttlMs
+        };
+        const { error } = await this.remoteChannel.client
+            .from('mcp_devices')
+            .update({
+                capabilities: {
+                    app_version: VERSION,
+                    transport_broadcast_v1: true,
+                    [MANAGED_CAPABILITY]: marker
+                },
+                status: 'online',
+                last_seen: new Date().toISOString()
+            })
+            .eq('id', agent.deviceId);
+        if (error)
+            throw new Error(`Could not enable auto-spawn transport: ${error.message}`);
+    }
+
+    async syncAgentToken(agent) {
+        const token = await this.currentAccessToken();
+        if (!token || token === agent.accessToken || !agent.realtimeClient)
             return;
-        this.pollInFlight = true;
-        try {
-            const deviceIds = [...this.agents.keys()];
-            const client = this.remoteChannel.client;
+        await agent.realtimeClient.realtime.setAuth(token);
+        agent.accessToken = token;
+    }
+
+    async handleDoorbell(agent, callId) {
+        if (!callId || this.stopping || agent.destroying)
+            return;
+        const client = this.remoteChannel.client;
+        let row = null;
+        let lastError = null;
+        for (const delayMs of [0, 500, 1500]) {
+            if (delayMs)
+                await sleep(delayMs);
             const { data, error } = await client
                 .from('mcp_remote_calls')
                 .select('*')
-                .in('device_id', deviceIds)
-                .eq('status', 'pending')
-                .limit(100);
-            if (error)
-                throw error;
-            for (const row of data || []) {
-                const agent = this.agents.get(row?.device_id);
-                if (!agent || agent.destroying || agent.seenCallIds.has(row?.id))
-                    continue;
-                void this.handlePendingRow(agent, row).catch((e) => {
-                    console.error(`[auto-spawn:${agent.shortId}] call ${row?.id} failed:`, e?.message);
-                });
+                .eq('id', callId)
+                .maybeSingle();
+            if (!error) {
+                row = data;
+                lastError = null;
+                break;
             }
+            lastError = error;
         }
-        finally {
-            this.pollInFlight = false;
+        if (lastError)
+            throw lastError;
+        if (!row || row.device_id !== agent.deviceId || row.status !== 'pending')
+            return;
+        await this.handlePendingRow(agent, row);
+    }
+
+    async notifyAgentResult(agent, callId) {
+        try {
+            const status = await agent.channel?.send({
+                type: 'broadcast',
+                event: 'result',
+                payload: { call_id: callId }
+            });
+            if (status === 'ok')
+                return;
         }
+        catch {}
+        await this.remoteChannel.notifyResult(callId);
     }
 
     async handlePendingRow(agent, row) {
@@ -257,7 +384,7 @@ export class DCAutoSpawnManager {
             });
 
             await this.remoteChannel.updateCallResult(callId, 'completed', result);
-            await this.remoteChannel.notifyResult(callId);
+            await this.notifyAgentResult(agent, callId);
         }
         catch (error) {
             if (agent.socket && !agent.socket.destroyed) {
@@ -269,7 +396,7 @@ export class DCAutoSpawnManager {
                 });
             }
             await this.remoteChannel.updateCallResult(callId, 'failed', null, error?.message || String(error));
-            await this.remoteChannel.notifyResult(callId);
+            await this.notifyAgentResult(agent, callId);
         }
         finally {
             agent.activeCalls.delete(callId);
@@ -405,6 +532,7 @@ export class DCAutoSpawnManager {
         await Promise.allSettled([...this.agents.values()].map(async (agent) => {
             if (agent.destroying)
                 return;
+            await this.syncAgentToken(agent);
             await client
                 .from('mcp_devices')
                 .update({ last_seen: nowIso, status: 'online' })
@@ -465,6 +593,24 @@ export class DCAutoSpawnManager {
         if (agent.socket && !agent.socket.destroyed)
             agent.socket.destroy();
 
+        if (agent.channel) {
+            try {
+                await Promise.race([agent.channel.untrack(), sleep(300)]);
+            }
+            catch {}
+            try {
+                await Promise.race([agent.channel.unsubscribe(), sleep(300)]);
+            }
+            catch {}
+            agent.channel = null;
+        }
+        try {
+            agent.realtimeClient?.realtime?.disconnect?.();
+        }
+        catch {}
+        agent.realtimeClient = null;
+        agent.accessToken = null;
+
         if (deleteRow && agent.deviceId && this.remoteChannel?.client && this.remoteChannel?.user?.id) {
             const userId = this.remoteChannel.user.id;
             const { error } = await this.remoteChannel.client
@@ -493,8 +639,6 @@ export class DCAutoSpawnManager {
             clearInterval(this.cleanupTimer);
         if (this.heartbeatTimer)
             clearInterval(this.heartbeatTimer);
-        if (this.pollTimer)
-            clearInterval(this.pollTimer);
         for (const agent of [...this.agents.values()])
             await this.destroyAgent(agent, { deleteRow: true, removeFromMap: true });
         if (this.server) {

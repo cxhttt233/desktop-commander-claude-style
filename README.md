@@ -21,7 +21,7 @@ It adds a compact Claude Code-inspired terminal status line, Desktop Commander t
 - Claude-style whimsical verbs are extracted locally from an installed Claude Code binary; the generated cache is not committed.
 - Windows launcher uses a ~150 ms TCP proxy probe and only refreshes the verb cache after Claude Code changes.
 - Optional R17 gateway mode allocates a temporary `deviceId` for a new AI conversation and opens a separate visible Desktop Commander window for it.
-- Auto-spawned devices share the gateway's authenticated Remote connection and local MCP engine; auth tokens are not copied into child processes.
+- Auto-spawned devices share the gateway's local MCP engine and refresh-token authority. Each temporary device gets only a lightweight Realtime Presence socket using the gateway's current access token; refresh tokens are never copied into child processes.
 - Temporary devices are deleted after 24 hours without a tool call. Worktrees, branches, repositories, and working directories remain user-controlled.
 - Gateway mode is opt-in per real device, so other physical/VM Desktop Commander devices keep their normal behavior.
 
@@ -33,7 +33,7 @@ Enable it only on the Desktop Commander instance you want to act as the entry ga
 $env:DC_AUTO_SPAWN = 'true'
 ```
 
-The first non-management tool call to that gateway returns `DC_INSTANCE_ASSIGNED` with a new `deviceId`. Retry the same tool call with that `deviceId`; subsequent calls in that conversation should keep using it. Each temporary instance has its own visible window and statusline, while the gateway uses one Remote login, one Realtime channel, one local MCP engine, and one shared pending-call poller.
+The first non-management tool call to that gateway returns `DC_INSTANCE_ASSIGNED` with a new `deviceId`. Retry the same tool call with that `deviceId`; subsequent calls in that conversation should keep using it. Each temporary instance has its own visible window, statusline, device ID, and lightweight Presence socket. The gateway remains the only refresh-token/session authority and the only local MCP engine.
 
 ## Install
 
