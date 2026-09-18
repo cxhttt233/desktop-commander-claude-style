@@ -26,7 +26,8 @@ class DCTerminalStatusLine {
         this.busy = 0;
         this.settling = false;
         this.frame = 0;
-        this.frames = ['✻','✽','✶','✳','✢','✳','✶','✽'];
+        this.frames = ['✻','✻','✻','✻','✻','✻'];
+        this.markStyles = ['1;96','96','1;97','97','96','1;96'];
         this.lastFrameAt = 0;
         this.verbs = this.loadVerbs();
         this.currentVerb = 'DC';
@@ -158,9 +159,13 @@ class DCTerminalStatusLine {
     writeMark(force = false) {
         if (!this.enabled || !this.active) return;
         const mark = this.currentMark();
-        if (!force && mark === this.lastMark) return;
-        this.writeAt(this.rows, this.layout().mark, mark, '1;96');
-        this.lastMark = mark;
+        const style = this.isVisuallyBusy()
+            ? this.markStyles[this.frame % this.markStyles.length]
+            : '1;96';
+        const key = `${mark}|${style}`;
+        if (!force && key === this.lastMark) return;
+        this.writeAt(this.rows, this.layout().mark, mark, style);
+        this.lastMark = key;
     }
 
     currentStatus() {

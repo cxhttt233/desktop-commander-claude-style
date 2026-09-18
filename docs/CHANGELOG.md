@@ -1,5 +1,11 @@
 # Changelog
 
+## R15
+
+- Use only the confirmed-safe `✻` glyph for every spinner frame.
+- Animate the spinner with ANSI brightness/color pulsing instead of switching Unicode star characters.
+- This avoids tofu/boxed glyphs during animation on Windows Terminal fonts while keeping visible activity.
+
 ## R14
 
 - Removed Unicode variation selectors that rendered as a boxed glyph in some Windows terminals.
