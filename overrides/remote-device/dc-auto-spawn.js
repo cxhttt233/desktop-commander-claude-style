@@ -511,38 +511,21 @@ export class DCAutoSpawnManager {
 
         if (process.platform === 'win32') {
             const psq = (v) => `'${String(v).replaceAll("'", "''")}'`;
-            const launcher = [
-                "$ErrorActionPreference = 'Continue'",
-                `$Host.UI.RawUI.WindowTitle = ${psq(`Desktop Commander - ${agent.deviceName}`)}`,
-                `Start-Transcript -Path ${psq(workerLogPath)} -Append | Out-Null`,
-                `& ${psq(process.execPath)} ${args.map(psq).join(' ')}`,
-                '$exitCode = $LASTEXITCODE',
-                'Stop-Transcript | Out-Null',
-                "if ($exitCode -ne 0) {",
-                "    Write-Host ('Worker exited with code ' + $exitCode) -ForegroundColor Red",
-                "    Write-Host 'Window will remain open for diagnostics.' -ForegroundColor Yellow",
-                '    Start-Sleep -Seconds 60',
-                '}',
-                'exit $exitCode'
-            ].join('\r\n');
-            await fs.writeFile(workerLogPath, `[gateway] launching worker at ${new Date().toISOString()}\r\n`, 'utf8');
-            const encodedCommand = Buffer.from(launcher, 'utf16le').toString('base64');
-            const child = spawn('powershell.exe', [
-                '-NoProfile',
-                '-ExecutionPolicy', 'Bypass',
-                '-EncodedCommand', encodedCommand
-            ], {
-                windowsHide: false,
-                detached: true,
-                stdio: 'ignore'
+            const argLine = args.map((v) => `"${String(v).replaceAll('"', '\\"')}"`).join(' ');
+            const command = `Start-Process -FilePath ${psq(process.execPath)} -ArgumentList ${psq(argLine)} -WindowStyle Normal`;
+            const logHandle = await fs.open(workerLogPath, 'a');
+            const child = spawn('powershell.exe', ['-NoProfile', '-Command', command], {
+                windowsHide: true,
+                detached: false,
+                stdio: ['ignore', logHandle.fd, logHandle.fd]
             });
             child.on('error', (error) => {
-                fs.appendFile(workerLogPath, `[gateway] spawn error: ${error.message}\r\n`, 'utf8').catch(() => {});
+                fs.appendFile(workerLogPath, `[gateway] launcher error: ${error.message}\r\n`, 'utf8').catch(() => {});
             });
             child.on('exit', (code, signal) => {
                 fs.appendFile(workerLogPath, `[gateway] launcher exit code=${code} signal=${signal || ''}\r\n`, 'utf8').catch(() => {});
+                logHandle.close().catch(() => {});
             });
-            child.unref();
         }
         else {
             const child = spawn(process.execPath, args, {
