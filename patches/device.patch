@@ -21,7 +21,7 @@
                  return;
              }
              let result;
-+            dcTerminalStatus.beginCall();
++            dcTerminalStatus.beginCall(tool_args);
              // Handle 'ping' tool specially
              if (tool_name === 'ping') {
                  result = {

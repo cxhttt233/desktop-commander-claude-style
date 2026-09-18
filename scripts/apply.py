@@ -79,7 +79,7 @@ if "./dc-terminal-status.js" not in device:
     new = "            console.log(`   - Device Name:  ${deviceName}`);\n            dcTerminalStatus.activate();\n            // Keep process alive"
     device = replace_once(device, old, new, 'device activate')
     old = "            let result;\n            // Handle 'ping' tool specially"
-    new = "            let result;\n            dcTerminalStatus.beginCall();\n            // Handle 'ping' tool specially"
+    new = "            let result;\n            dcTerminalStatus.beginCall(tool_args);\n            // Handle 'ping' tool specially"
     device = replace_once(device, old, new, 'device begin')
     old = "            console.log(`✅ Tool call ${tool_name} completed:\\r\\n ${JSON.stringify(result)}`);"
     new = "            console.log(`✅ Tool call ${tool_name} completed:\\r\\n ${summarizeToolResult(result)}`);\n            dcTerminalStatus.finishCall(result?._meta?.dcTokenMeter);"

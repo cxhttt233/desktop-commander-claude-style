@@ -1,5 +1,13 @@
 # Changelog
 
+## R16
+
+- Start `↓` input-byte and call-count animation as soon as the tool call reaches the remote device.
+- Pass real `tool_args` into the statusline and count their serialized UTF-8 bytes immediately.
+- Keep `↑` output accounting truthful: it updates from the real result when the tool returns, with no fabricated streaming.
+- Reconcile local live counters with server cumulative telemetry monotonically so concurrent calls cannot make counters move backward.
+- Cap the completion settle animation for a quicker Claude-like handoff back to idle.
+
 ## R15
 
 - Use only the confirmed-safe `✻` glyph for every spinner frame.

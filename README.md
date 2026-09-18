@@ -13,6 +13,8 @@ It adds a compact Claude Code-inspired terminal status line, Desktop Commander t
 
 - Fixed one-line bottom status area; logs scroll above it.
 - Fixed positions for `↓`, `↑`, and call count.
+- `↓` input bytes and call count start animating immediately when a tool call begins.
+- `↑` output bytes settle from the real tool result when it becomes available; non-streaming tools are not given fake output growth.
 - Spinner/activity text remains active while the numeric odometer settles, then stops together.
 - `↓` / `↑` measure cumulative Desktop Commander tool payload bytes for the current process.
 - Images/audio/blob/raw Base64 bodies are summarized in local logs instead of flooding the terminal.

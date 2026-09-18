@@ -234,7 +234,7 @@ class DCTerminalStatusLine {
         this.rawWrite(`\x1b[${this.logBottom};1H`);
     }
 
-    beginCall() {
+    beginCall(toolArgs) {
         if (!this.enabled) return;
         const wasIdle = !this.isVisuallyBusy();
         this.busy += 1;
@@ -244,6 +244,22 @@ class DCTerminalStatusLine {
             this.currentVerb = this.pickVerb();
             this.nextVerbAt = Date.now() + 1800 + Math.floor(Math.random() * 1600);
         }
+
+        let inputBytes = 0;
+        try {
+            inputBytes = Buffer.byteLength(JSON.stringify(toolArgs ?? ''), 'utf8');
+        } catch { }
+
+        this.fromIn = this.currentIn;
+        this.fromOut = this.currentOut;
+        this.fromCalls = this.currentCalls;
+        this.targetIn = Math.max(this.targetIn, this.currentIn) + inputBytes;
+        this.targetOut = Math.max(this.targetOut, this.currentOut);
+        this.targetCalls = Math.max(this.targetCalls, this.currentCalls) + 1;
+        this.animationDuration = Math.max(700, Math.min(1800, this.animationMs(this.fromIn, this.targetIn)));
+        this.animationStarted = Date.now();
+        this.animating = true;
+
         this.writeMark(true);
         this.writeStatus(true);
     }
@@ -266,13 +282,17 @@ class DCTerminalStatusLine {
         this.fromIn = this.currentIn;
         this.fromOut = this.currentOut;
         this.fromCalls = this.currentCalls;
-        this.targetIn = Number(stats.sessionInputBytes ?? stats.inputBytes ?? this.currentIn) || 0;
-        this.targetOut = Number(stats.sessionOutputBytes ?? stats.outputBytes ?? this.currentOut) || 0;
-        this.targetCalls = Number(stats.sessionCalls ?? stats.calls ?? this.currentCalls) || 0;
+
+        const serverIn = Number(stats.sessionInputBytes ?? stats.inputBytes ?? 0) || 0;
+        const serverOut = Number(stats.sessionOutputBytes ?? stats.outputBytes ?? 0) || 0;
+        const serverCalls = Number(stats.sessionCalls ?? stats.calls ?? 0) || 0;
+        this.targetIn = Math.max(this.targetIn, serverIn, this.currentIn);
+        this.targetOut = Math.max(this.targetOut, serverOut, this.currentOut);
+        this.targetCalls = Math.max(this.targetCalls, serverCalls, this.currentCalls);
 
         const d1 = this.animationMs(this.fromIn, this.targetIn);
         const d2 = this.animationMs(this.fromOut, this.targetOut);
-        this.animationDuration = Math.max(d1, d2);
+        this.animationDuration = Math.max(500, Math.min(2200, Math.max(d1, d2)));
         this.animationStarted = Date.now();
         this.animating = true;
         this.settling = this.busy === 0;
