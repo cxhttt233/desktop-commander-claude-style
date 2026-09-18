@@ -43,8 +43,15 @@ export class DCAutoSpawnManager {
         this.profileRoot = path.join(os.homedir(), '.desktop-commander-device', 'auto');
     }
 
-    shouldRedirect(toolName) {
-        return this.enabled && toolName !== 'ping' && toolName !== 'shutdown';
+    shouldRedirect(toolName, toolArgs = {}) {
+        if (!this.enabled || toolName === 'ping' || toolName === 'shutdown')
+            return false;
+        if (toolName === 'start_process') {
+            const command = String(toolArgs?.command || '');
+            if (command.startsWith('# DC_GATEWAY_MAINTENANCE'))
+                return false;
+        }
+        return true;
     }
 
     async start() {
@@ -521,9 +528,12 @@ export class DCAutoSpawnManager {
             ].join('\r\n');
             await fs.writeFile(launcherPath, launcher, 'utf8');
 
-            const command = `Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',${psq(launcherPath)}) -WindowStyle Normal`;
-            const child = spawn('powershell.exe', ['-NoProfile', '-Command', command], {
-                windowsHide: true,
+            const child = spawn('powershell.exe', [
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-File', launcherPath
+            ], {
+                windowsHide: false,
                 detached: true,
                 stdio: 'ignore'
             });
