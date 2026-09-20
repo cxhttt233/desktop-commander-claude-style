@@ -14,8 +14,8 @@ const updates = [];
 const notifications = [];
 
 const desktop = {
-  async callClientTool(name, args) {
-    starts.push({ name, at: Date.now(), args });
+  async callClientTool(name, args, metadata) {
+    starts.push({ name, at: Date.now(), args, metadata });
     await new Promise((resolve) => setTimeout(resolve, 350));
     return { content: [{ type: 'text', text: `done:${name}` }] };
   }
@@ -47,6 +47,7 @@ function makeAgent(deviceId, shortId) {
     shortId,
     deviceId,
     deviceName: `host-agent-${shortId}`,
+    taskLabel: `任务-${shortId}`,
     socket,
     lastActiveAt: 0,
     seenCallIds: new Set(),
@@ -69,6 +70,8 @@ await Promise.all([
 const elapsed = Date.now() - startedAt;
 
 assert.equal(starts.length, 2);
+assert.ok(starts.every((x) => x.metadata?.dcAgentDeviceId), 'child device metadata should reach local MCP');
+assert.deepEqual(starts.map((x) => x.metadata.dcAgentTaskLabel).sort(), ['任务-a1', '任务-b1']);
 assert.ok(Math.abs(starts[0].at - starts[1].at) < 100, 'calls should start concurrently');
 assert.ok(elapsed < 800, `parallel dispatch took too long: ${elapsed}ms`);
 assert.deepEqual(updates.map((x) => [x.id, x.status]).sort(), [

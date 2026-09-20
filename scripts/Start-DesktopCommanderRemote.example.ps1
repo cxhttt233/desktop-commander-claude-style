@@ -34,6 +34,7 @@ if ($refresh -and (Test-Path $extractor)) { python $extractor *> $null }
 
 # Optional gateway mode: allocate one temporary DC device/window per AI conversation.
 $env:DC_AUTO_SPAWN = 'true'
+$env:DC_STATS_SERVER = 'true'
 
 $entry = Join-Path $packageRoot 'dist\index.js'
 $nodeVersion = try { (& $node --version 2>$null | Select-Object -First 1) } catch { 'unknown' }

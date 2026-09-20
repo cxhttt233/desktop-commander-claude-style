@@ -24,6 +24,7 @@ It adds a compact Claude Code-inspired terminal status line, Desktop Commander t
 - Auto-spawned devices share the gateway's local MCP engine and refresh-token authority. Each temporary device gets only a lightweight Realtime Presence socket using the gateway's current access token; refresh tokens are never copied into child processes.
 - Temporary devices are deleted after 24 hours without a tool call. Worktrees, branches, repositories, and working directories remain user-controlled.
 - Gateway mode is opt-in per real device, so other physical/VM Desktop Commander devices keep their normal behavior.
+- Optional local statistics dashboard binds only to `127.0.0.1:17891` and stores append-only daily JSONL under `%LOCALAPPDATA%\DesktopCommander\stats`; no external database is required.
 
 ## Auto-spawn mode
 
@@ -34,6 +35,12 @@ $env:DC_AUTO_SPAWN = 'true'
 ```
 
 The first non-management tool call to that gateway returns `DC_INSTANCE_ASSIGNED` with a new `deviceId` plus a short recovery rule. Before retrying the original call, register a short Chinese task label with `# DC_AGENT_META` and `TASK=<6-20字中文任务>`. Desktop Commander intercepts this metadata command instead of executing it, persists the label in `instance.json`, publishes it as `capabilities.dc_auto_spawn_v1.task_label`, and shows `子 Agent · <任务>` in a fixed header. The returned recovery rule tells the AI to keep using that conversation's device, call `list_devices` before claiming Desktop Commander is unavailable, recover only a child whose `task_label` matches the conversation, and allocate a new child from the gateway if no match exists.
+
+## Local statistics dashboard
+
+Set `DC_STATS_SERVER=true` on the main Remote entry process. The dashboard is available at `http://127.0.0.1:17891` and exposes only read-only local HTTP endpoints. Each tool call appends one JSON object to a daily `traffic-YYYY-MM-DD.jsonl` file. The dashboard aggregates daily/hourly usage, tool and task rankings, failures, duration, payload bytes, and estimated text tokens. It never stores tool arguments or tool result bodies.
+
+On first start, the dashboard performs a one-time best-effort history import. It reads `~/.claude-server-commander/tool-history.jsonl` for recent calls with outputs/duration and `dcTokenMeter`, plus `claude_tool_call*.log` for older input-side calls. Consecutive meter records are restored per call; gaps or capped outputs are reconciled against each session's final cumulative meter so overall historical token/byte totals stay close to the original meter. Older argument-only records are marked input-only. The import is idempotent and recorded in `history-import-v1.json`.
 
 ## Install
 

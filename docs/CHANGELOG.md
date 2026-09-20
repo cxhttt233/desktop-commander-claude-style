@@ -15,6 +15,8 @@
 - Add a fixed child-agent task header. New auto-spawn sessions request a `# DC_AGENT_META` / `TASK=...` label, persist it in `instance.json`, and show `子 Agent · <任务>` at the top without executing or counting the metadata command.
 - Add lightweight main-Remote startup lifecycle logging (`START`, `EXIT`, `ERROR`) without redirecting stdout/stderr or changing TTY behavior, for diagnosing intermittent launcher failures.
 - Add a concise AI recovery hint to `DC_INSTANCE_ASSIGNED` / `DC_AGENT_META_OK`, and publish the Chinese task label as `dc_auto_spawn_v1.task_label` so `list_devices` can recover the correct conversation child instead of declaring DC unavailable too early.
+- Add a localhost-only usage dashboard on `127.0.0.1:17891`, backed by append-only daily JSONL files instead of a database. It reports day/hour trends, tool/task rankings, recent calls, failures, duration, payload bytes, and estimated text tokens without storing tool payload contents.
+- Recover existing usage history once from `tool-history.jsonl` and `claude_tool_call*.log`; use persisted cumulative meter sessions to reconcile gaps caused by capped history outputs, while marking older argument-only records as partial. Recovery is idempotent via `history-import-v1.json`.
 - Clean up orphaned temporary devices on gateway restart and delete a temporary device if its window crashes.
 
 ## R16

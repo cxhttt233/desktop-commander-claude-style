@@ -452,7 +452,14 @@ export class DCAutoSpawnManager {
                     destroyAfterReply = true;
                 }
                 else {
-                    result = await this.desktop.callClientTool(row.tool_name, row.tool_args, row.metadata || {});
+                    const metadata = {
+                        ...(row.metadata || {}),
+                        dcAgentDeviceId: agent.deviceId,
+                        dcAgentInstanceId: agent.instanceId,
+                        dcAgentName: agent.deviceName,
+                        dcAgentTaskLabel: agent.taskLabel || null
+                    };
+                    result = await this.desktop.callClientTool(row.tool_name, row.tool_args, metadata);
                 }
             }
 

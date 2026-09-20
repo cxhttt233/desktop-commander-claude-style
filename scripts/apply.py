@@ -71,6 +71,105 @@ async function dcRecordTokenTraffic(args, result) {
     new = "        try {\n            const dcTokenMeter = await dcRecordTokenTraffic(args, result);\n            result._meta = { ...(result._meta || {}), dcTokenMeter };\n        }\n        catch { /* meter failure must never break a tool call */ }\n        return result;\n    }\n    catch (error) {"
     server = replace_once(server, old, new, 'server result anchor')
 
+stats_import = "import { dcStats } from './dc-stats-server.js';\n"
+if stats_import not in server:
+    old = "import { measureArgs, measureResult } from './dc-traffic-meter.js';\n"
+    new = old + stats_import + "dcStats.start();\n"
+    server = replace_once(server, old, new, 'stats server import')
+
+    old = r'''async function dcRecordTokenTraffic(args, result) {
+    const input = measureArgs(args);
+    const output = measureResult(result);
+    dcProcessTokenMeter.inputTokens += input.textTokens;
+    dcProcessTokenMeter.outputTokens += output.textTokens;
+    dcProcessTokenMeter.inputBytes += Buffer.byteLength(JSON.stringify(args ?? ''), 'utf8');
+    dcProcessTokenMeter.outputBytes += Buffer.byteLength(JSON.stringify(result?.content ?? result ?? ''), 'utf8');
+    dcProcessTokenMeter.calls += 1;
+    dcProcessTokenMeter.sessionInputTokens = dcProcessTokenMeter.inputTokens;
+    dcProcessTokenMeter.sessionOutputTokens = dcProcessTokenMeter.outputTokens;
+    dcProcessTokenMeter.sessionInputBytes = dcProcessTokenMeter.inputBytes;
+    dcProcessTokenMeter.sessionOutputBytes = dcProcessTokenMeter.outputBytes;
+    dcProcessTokenMeter.sessionCalls = dcProcessTokenMeter.calls;
+    dcAddMetrics('in', input);
+    dcAddMetrics('out', output);
+    dcProcessTokenMeter.lastActivity = Date.now();
+    return { ...dcProcessTokenMeter };
+}
+'''
+    new = r'''function dcStatsMeta(metadata) {
+    return {
+        agentDeviceId: metadata?.dcAgentDeviceId || null,
+        agentInstanceId: metadata?.dcAgentInstanceId || null,
+        agentName: metadata?.dcAgentName || null,
+        taskLabel: metadata?.dcAgentTaskLabel || null,
+        clientName: metadata?.clientInfo?.name || null
+    };
+}
+async function dcRecordTokenTraffic(name, args, result, metadata, startTime) {
+    const input = measureArgs(args);
+    const output = measureResult(result);
+    const inputBytes = Buffer.byteLength(JSON.stringify(args ?? ''), 'utf8');
+    const outputBytes = Buffer.byteLength(JSON.stringify(result?.content ?? result ?? ''), 'utf8');
+    dcProcessTokenMeter.inputTokens += input.textTokens;
+    dcProcessTokenMeter.outputTokens += output.textTokens;
+    dcProcessTokenMeter.inputBytes += inputBytes;
+    dcProcessTokenMeter.outputBytes += outputBytes;
+    dcProcessTokenMeter.calls += 1;
+    dcProcessTokenMeter.sessionInputTokens = dcProcessTokenMeter.inputTokens;
+    dcProcessTokenMeter.sessionOutputTokens = dcProcessTokenMeter.outputTokens;
+    dcProcessTokenMeter.sessionInputBytes = dcProcessTokenMeter.inputBytes;
+    dcProcessTokenMeter.sessionOutputBytes = dcProcessTokenMeter.outputBytes;
+    dcProcessTokenMeter.sessionCalls = dcProcessTokenMeter.calls;
+    dcAddMetrics('in', input);
+    dcAddMetrics('out', output);
+    dcProcessTokenMeter.lastActivity = Date.now();
+    await dcStats.record({
+        eventId: 'm:' + dcProcessTokenMeter.sessionStarted + ':' + dcProcessTokenMeter.calls,
+        tool: name, status: 'ok', durationMs: Date.now() - startTime,
+        inputTokens: input.textTokens, outputTokens: output.textTokens,
+        inputBytes, outputBytes,
+        imageInCount: input.imageCount || 0, imageOutCount: output.imageCount || 0,
+        audioInCount: input.audioCount || 0, audioOutCount: output.audioCount || 0,
+        blobInCount: input.blobCount || 0, blobOutCount: output.blobCount || 0,
+        binaryInCount: input.binaryCount || 0, binaryOutCount: output.binaryCount || 0,
+        linkInCount: input.linkCount || 0, linkOutCount: output.linkCount || 0,
+        ...dcStatsMeta(metadata)
+    });
+    return { ...dcProcessTokenMeter };
+}
+async function dcRecordTokenFailure(name, args, error, metadata, startTime) {
+    const input = measureArgs(args);
+    await dcStats.record({
+        eventId: 'f:' + Math.floor(startTime / 1000) + ':' + name,
+        tool: name, status: 'error', durationMs: Date.now() - startTime,
+        inputTokens: input.textTokens, outputTokens: 0,
+        inputBytes: Buffer.byteLength(JSON.stringify(args ?? ''), 'utf8'), outputBytes: 0,
+        error: String(error?.message || error || '').slice(0, 500),
+        ...dcStatsMeta(metadata)
+    });
+}
+'''
+    server = replace_once(server, old, new, 'stats recorder migration')
+
+    old = "const dcTokenMeter = await dcRecordTokenTraffic(args, result);"
+    new = "const dcTokenMeter = await dcRecordTokenTraffic(name, args, result, request.params._meta, startTime);"
+    server = replace_once(server, old, new, 'stats success call migration')
+
+    old = "        const errorMessage = error instanceof Error ? error.message : String(error);\n        // Track the failure"
+    new = "        const errorMessage = error instanceof Error ? error.message : String(error);\n        try { await dcRecordTokenFailure(name, args, error, request.params._meta, startTime); } catch {}\n        // Track the failure"
+    server = replace_once(server, old, new, 'stats failure call migration')
+
+# Upgrade an already-installed stats recorder without requiring a clean package.
+old_stats_success = "    await dcStats.record({\n        tool: name, status: 'ok', durationMs: Date.now() - startTime,"
+new_stats_success = "    await dcStats.record({\n        eventId: 'm:' + dcProcessTokenMeter.sessionStarted + ':' + dcProcessTokenMeter.calls,\n        tool: name, status: 'ok', durationMs: Date.now() - startTime,"
+if old_stats_success in server:
+    server = replace_once(server, old_stats_success, new_stats_success, 'stats event id success migration')
+
+old_stats_failure = "    await dcStats.record({\n        tool: name, status: 'error', durationMs: Date.now() - startTime,"
+new_stats_failure = "    await dcStats.record({\n        eventId: 'f:' + Math.floor(startTime / 1000) + ':' + name,\n        tool: name, status: 'error', durationMs: Date.now() - startTime,"
+if old_stats_failure in server:
+    server = replace_once(server, old_stats_failure, new_stats_failure, 'stats event id failure migration')
+
 if "./dc-terminal-status.js" not in device:
     old = "import { captureRemote } from '../utils/capture.js';\n"
     new = old + "import { dcTerminalStatus } from './dc-terminal-status.js';\nimport { summarizeToolResult } from './dc-content-summary.js';\n"
