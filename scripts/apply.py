@@ -203,7 +203,7 @@ if "./dc-auto-spawn.js" not in device:
     old = "            let result;\n            dcTerminalStatus.beginCall(tool_args);\n"
     new = (
         "            if (this.autoSpawn?.shouldRedirect(tool_name, tool_args)) {\n"
-        "                const redirect = await this.autoSpawn.allocateRedirect(call_id);\n"
+        "                const redirect = await this.autoSpawn.allocateRedirect(call_id, metadata);\n"
         "                console.log(`🧩 Assigned isolated DC for call ${call_id}`);\n"
         "                await this.remoteChannel.updateCallResult(call_id, 'completed', redirect);\n"
         "                await this.remoteChannel.notifyResult(call_id);\n"
