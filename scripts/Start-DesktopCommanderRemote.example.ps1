@@ -3,6 +3,15 @@ $dcRoot = Join-Path $env:LOCALAPPDATA 'DesktopCommander'
 $packageRoot = Join-Path $dcRoot 'node_modules\@wonderwhy-er\desktop-commander'
 $node = 'C:\Program Files\nodejs\node.exe'
 
+$logDir = Join-Path $dcRoot 'logs'
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$startupLog = Join-Path $logDir 'remote-startup.log'
+function Write-StartupLog {
+    param([string]$Message)
+    $timestamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff K')
+    Add-Content -Path $startupLog -Value "[$timestamp] $Message" -Encoding UTF8
+}
+
 $proxyUp = $false
 $probe = [Net.Sockets.TcpClient]::new()
 try {
@@ -26,6 +35,16 @@ if ($refresh -and (Test-Path $extractor)) { python $extractor *> $null }
 # Optional gateway mode: allocate one temporary DC device/window per AI conversation.
 $env:DC_AUTO_SPAWN = 'true'
 
+$entry = Join-Path $packageRoot 'dist\index.js'
+$nodeVersion = try { (& $node --version 2>$null | Select-Object -First 1) } catch { 'unknown' }
+Write-StartupLog "START pid=$PID node=$nodeVersion proxy=$proxyUp script=$PSCommandPath"
 Write-Host 'Desktop Commander Remote' -ForegroundColor Cyan
 Write-Host 'Press Ctrl+C or close this window to stop.' -ForegroundColor DarkGray
-& $node (Join-Path $packageRoot 'dist\index.js') remote
+try {
+    & $node $entry remote
+    Write-StartupLog "EXIT pid=$PID code=$LASTEXITCODE"
+}
+catch {
+    Write-StartupLog "ERROR pid=$PID type=$($_.Exception.GetType().FullName) message=$($_.Exception.Message)"
+    throw
+}

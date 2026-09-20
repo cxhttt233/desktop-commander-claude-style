@@ -13,6 +13,7 @@
 - Disable Windows QuickEdit only inside auto-spawn worker consoles so accidental selection cannot freeze status/output until Enter or Esc is pressed.
 - Stabilize Claude-style activity verbs across consecutive short calls: reuse the same word across idle gaps, keep it through settling, and only rotate during sustained work after roughly 12–20 seconds.
 - Add a fixed child-agent task header. New auto-spawn sessions request a `# DC_AGENT_META` / `TASK=...` label, persist it in `instance.json`, and show `子 Agent · <任务>` at the top without executing or counting the metadata command.
+- Add lightweight main-Remote startup lifecycle logging (`START`, `EXIT`, `ERROR`) without redirecting stdout/stderr or changing TTY behavior, for diagnosing intermittent launcher failures.
 - Clean up orphaned temporary devices on gateway restart and delete a temporary device if its window crashes.
 
 ## R16
