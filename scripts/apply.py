@@ -125,7 +125,7 @@ async function dcRecordTokenTraffic(name, args, result, metadata, startTime) {
     dcProcessTokenMeter.lastActivity = Date.now();
     await dcStats.record({
         eventId: 'm:' + dcProcessTokenMeter.sessionStarted + ':' + dcProcessTokenMeter.calls,
-        tool: name, status: 'ok', durationMs: Date.now() - startTime,
+        tool: name, status: result?.isError ? 'error' : 'ok', durationMs: Date.now() - startTime,
         inputTokens: input.textTokens, outputTokens: output.textTokens,
         inputBytes, outputBytes,
         imageInCount: input.imageCount || 0, imageOutCount: output.imageCount || 0,
@@ -169,6 +169,35 @@ old_stats_failure = "    await dcStats.record({\n        tool: name, status: 'er
 new_stats_failure = "    await dcStats.record({\n        eventId: 'f:' + Math.floor(startTime / 1000) + ':' + name,\n        tool: name, status: 'error', durationMs: Date.now() - startTime,"
 if old_stats_failure in server:
     server = replace_once(server, old_stats_failure, new_stats_failure, 'stats event id failure migration')
+
+# Record and attach the meter before ToolHistory snapshots/caps the result.
+# This keeps dcTokenMeter inside tool-history even for outputs whose content is
+# replaced by the 4 KiB omission marker, so later crash recovery can dedupe by
+# the stable m:<session>:<call> event id instead of estimating a second row.
+stats_before_history_marker = "// dc-stats-before-history-v2"
+if stats_before_history_marker not in server:
+    old_end_stats = (
+        "        try {\n"
+        "            const dcTokenMeter = await dcRecordTokenTraffic(name, args, result, request.params._meta, startTime);\n"
+        "            result._meta = { ...(result._meta || {}), dcTokenMeter };\n"
+        "        }\n"
+        "        catch { /* meter failure must never break a tool call */ }\n"
+        "        return result;\n"
+    )
+    if old_end_stats in server:
+        server = replace_once(server, old_end_stats, "        return result;\n", 'move stats before history')
+
+    history_anchor = "        const duration = Date.now() - startTime;\n        isError = !!result.isError;\n"
+    history_stats = (
+        history_anchor +
+        "        " + stats_before_history_marker + "\n"
+        "        try {\n"
+        "            const dcTokenMeter = await dcRecordTokenTraffic(name, args, result, request.params._meta, startTime);\n"
+        "            result._meta = { ...(result._meta || {}), dcTokenMeter };\n"
+        "        }\n"
+        "        catch { /* meter failure must never break a tool call */ }\n"
+    )
+    server = replace_once(server, history_anchor, history_stats, 'stats before history anchor')
 
 if "./dc-terminal-status.js" not in device:
     old = "import { captureRemote } from '../utils/capture.js';\n"
