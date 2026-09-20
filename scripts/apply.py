@@ -170,6 +170,11 @@ new_stats_failure = "    await dcStats.record({\n        eventId: 'f:' + Math.fl
 if old_stats_failure in server:
     server = replace_once(server, old_stats_failure, new_stats_failure, 'stats event id failure migration')
 
+old_stats_status = "        tool: name, status: 'ok', durationMs: Date.now() - startTime,"
+new_stats_status = "        tool: name, status: result?.isError ? 'error' : 'ok', durationMs: Date.now() - startTime,"
+if old_stats_status in server:
+    server = replace_once(server, old_stats_status, new_stats_status, 'stats soft-error status migration')
+
 # Record and attach the meter before ToolHistory snapshots/caps the result.
 # This keeps dcTokenMeter inside tool-history even for outputs whose content is
 # replaced by the 4 KiB omission marker, so later crash recovery can dedupe by
@@ -264,6 +269,11 @@ old_redirect_call = "            if (this.autoSpawn?.shouldRedirect(tool_name)) 
 new_redirect_call = "            if (this.autoSpawn?.shouldRedirect(tool_name, tool_args)) {\n"
 if old_redirect_call in device:
     device = replace_once(device, old_redirect_call, new_redirect_call, 'auto-spawn maintenance migration')
+
+old_allocate_redirect = "                const redirect = await this.autoSpawn.allocateRedirect(call_id);\n"
+new_allocate_redirect = "                const redirect = await this.autoSpawn.allocateRedirect(call_id, metadata);\n"
+if old_allocate_redirect in device:
+    device = replace_once(device, old_allocate_redirect, new_allocate_redirect, 'auto-spawn metadata migration')
 
 server_path.write_text(server, encoding='utf-8', newline='\n')
 device_path.write_text(device, encoding='utf-8', newline='\n')
