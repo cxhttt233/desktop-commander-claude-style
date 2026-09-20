@@ -60,6 +60,7 @@ let stopping = false;
 let socket = null;
 let buffer = '';
 let localOutputBytes = 0;
+let taskLabel = '等待任务说明';
 const callNames = new Map();
 
 async function shutdown(exitCode = 0) {
@@ -78,6 +79,15 @@ function writeJson(value) {
     if (!socket || socket.destroyed)
         return;
     socket.write(`${JSON.stringify(value)}\n`);
+}
+
+function handleMeta(message) {
+    const next = String(message.taskLabel || '').trim();
+    if (!next)
+        return;
+    taskLabel = next;
+    dcTerminalStatus.setHeader(`子 Agent · ${taskLabel}`);
+    process.stdout.write(`\x1b]0;Desktop Commander · 子 Agent · ${taskLabel}\x07`);
 }
 
 function handleCall(message) {
@@ -102,6 +112,7 @@ function handleResult(message) {
 }
 
 async function main() {
+    dcTerminalStatus.setHeader(`子 Agent · ${taskLabel}`);
     dcTerminalStatus.activate();
 
     socket = net.createConnection({ host: '127.0.0.1', port }, () => {
@@ -133,7 +144,9 @@ async function main() {
             catch {
                 continue;
             }
-            if (message.type === 'call')
+            if (message.type === 'meta')
+                handleMeta(message);
+            else if (message.type === 'call')
                 handleCall(message);
             else if (message.type === 'result')
                 handleResult(message);

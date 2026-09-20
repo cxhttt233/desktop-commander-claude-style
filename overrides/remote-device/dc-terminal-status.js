@@ -9,6 +9,8 @@ class DCTerminalStatusLine {
         this.height = 1;
         this.rows = process.stdout.rows || 30;
         this.cols = process.stdout.columns || 100;
+        this.headerText = '';
+        this.logTop = 1;
         this.logBottom = Math.max(1, this.rows - 1);
         this.rawWrite = process.stdout.write.bind(process.stdout);
         this.originalConsole = new Map();
@@ -103,9 +105,26 @@ class DCTerminalStatusLine {
         if (!this.enabled) return;
         this.rows = process.stdout.rows || this.rows || 30;
         this.cols = process.stdout.columns || this.cols || 100;
-        this.logBottom = Math.max(1, this.rows - 1);
-        this.rawWrite(`\x1b[1;${this.logBottom}r`);
+        this.logTop = this.headerText ? 2 : 1;
+        this.logBottom = Math.max(this.logTop, this.rows - 1);
+        this.rawWrite(`\x1b[${this.logTop};${this.logBottom}r`);
         this.rawWrite('\x1b[?25l');
+    }
+
+    setHeader(text) {
+        this.headerText = String(text || '').trim();
+        if (!this.enabled || !this.active) return;
+        this.setupRegion();
+        this.drawHeader();
+        this.rawWrite(`\x1b[${this.logBottom};1H`);
+    }
+
+    drawHeader() {
+        if (!this.enabled || !this.active || !this.headerText) return;
+        const maxChars = Math.max(8, Math.floor((this.cols - 4) / 2));
+        const text = Array.from(this.headerText).slice(0, maxChars).join('');
+        this.rawWrite('\x1b[1;1H\x1b[2K');
+        this.writeAt(1, 2, text, '1;97');
     }
 
     layout() {
@@ -231,6 +250,7 @@ class DCTerminalStatusLine {
         this.active = true;
         this.patchConsole();
         this.setupRegion();
+        this.drawHeader();
         this.drawStatic();
         this.rawWrite(`\x1b[${this.logBottom};1H`);
     }
@@ -350,6 +370,7 @@ class DCTerminalStatusLine {
     handleResize() {
         if (!this.active) return;
         this.setupRegion();
+        this.drawHeader();
         this.drawStatic();
         this.rawWrite(`\x1b[${this.logBottom};1H`);
     }

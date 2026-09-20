@@ -33,7 +33,7 @@ Enable it only on the Desktop Commander instance you want to act as the entry ga
 $env:DC_AUTO_SPAWN = 'true'
 ```
 
-The first non-management tool call to that gateway returns `DC_INSTANCE_ASSIGNED` with a new `deviceId`. Retry the same tool call with that `deviceId`; subsequent calls in that conversation should keep using it. Each temporary instance has its own visible window, statusline, device ID, and lightweight Presence socket. The gateway remains the only refresh-token/session authority and the only local MCP engine.
+The first non-management tool call to that gateway returns `DC_INSTANCE_ASSIGNED` with a new `deviceId`. Before retrying the original call, register a short Chinese task label on the new device with a `start_process` call whose command is exactly `# DC_AGENT_META` on the first line and `TASK=<6-20个字的任务说明>` on the second line. Desktop Commander intercepts this metadata command instead of executing it, persists the label in `instance.json`, and shows `子 Agent · <任务>` in a fixed header. Then retry the original tool call with that `deviceId`; subsequent calls in that conversation should keep using it. Each temporary instance has its own visible window, statusline, device ID, and lightweight Presence socket. The gateway remains the only refresh-token/session authority and the only local MCP engine.
 
 ## Install
 

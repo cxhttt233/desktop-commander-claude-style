@@ -106,6 +106,7 @@ export class DCAutoSpawnManager {
             realtimeClient: null,
             channel: null,
             accessToken: null,
+            taskLabel: null,
             lastActiveAt: now,
             seenCallIds: new Set(),
             activeCalls: new Set(),
@@ -125,7 +126,8 @@ export class DCAutoSpawnManager {
                 deviceName: agent.deviceName,
                 parentDeviceId: this.parentDeviceId,
                 createdAt: new Date(now).toISOString(),
-                ttlMs: this.ttlMs
+                ttlMs: this.ttlMs,
+                taskLabel: null
             }, null, 2), 'utf8');
 
             await this.connectAgentPresence(agent);
@@ -142,7 +144,12 @@ export class DCAutoSpawnManager {
                         `deviceName: ${agent.deviceName}`,
                         `instanceId: ${agent.instanceId}`,
                         '',
-                        'Retry the same Desktop Commander tool call on this deviceId.',
+                        'Before retrying the original tool call, register a short Chinese task label on this device.',
+                        'Call start_process on this deviceId with exactly this two-line format:',
+                        '# DC_AGENT_META',
+                        'TASK=<6-20个字，说明为什么创建这个子Agent>',
+                        'This metadata command is intercepted by Desktop Commander and is not executed in the shell.',
+                        'Then retry the original Desktop Commander tool call on this deviceId.',
                         'Use this deviceId for all subsequent Desktop Commander calls in this conversation.',
                         'This temporary instance is automatically deleted after 24 hours without a tool call.'
                     ].join('\n')
@@ -336,6 +343,33 @@ export class DCAutoSpawnManager {
         await this.remoteChannel.notifyResult(callId);
     }
 
+    extractAgentTask(row) {
+        if (row?.tool_name !== 'start_process')
+            return null;
+        const command = String(row?.tool_args?.command || '').replace(/\r\n/g, '\n').trim();
+        const lines = command.split('\n').map((line) => line.trim());
+        if (lines[0] !== '# DC_AGENT_META')
+            return null;
+        const taskLine = lines.find((line) => line.startsWith('TASK='));
+        if (!taskLine)
+            return '';
+        const task = taskLine.slice(5).replace(/\s+/g, ' ').trim();
+        return Array.from(task).slice(0, 40).join('');
+    }
+
+    async setAgentTask(agent, taskLabel) {
+        agent.taskLabel = taskLabel;
+        const profilePath = path.join(agent.profileDir, 'instance.json');
+        let profile = {};
+        try {
+            profile = JSON.parse(await fs.readFile(profilePath, 'utf8'));
+        }
+        catch {}
+        profile.taskLabel = taskLabel;
+        await fs.writeFile(profilePath, JSON.stringify(profile, null, 2), 'utf8');
+        this.writeJson(agent.socket, { type: 'meta', taskLabel });
+    }
+
     async handlePendingRow(agent, row) {
         const callId = row?.id;
         if (!callId || this.stopping || agent.destroying)
@@ -354,47 +388,63 @@ export class DCAutoSpawnManager {
         agent.lastActiveAt = Date.now();
         agent.activeCalls.add(callId);
         let destroyAfterReply = false;
+        let isAgentMeta = false;
         try {
             if (!agent.socket || agent.socket.destroyed)
                 throw new Error(`Worker ${agent.deviceName} is not connected`);
 
-            this.writeJson(agent.socket, {
-                type: 'call',
-                callId: row.id,
-                toolName: row.tool_name,
-                toolArgs: row.tool_args
-            });
+            const taskLabel = this.extractAgentTask(row);
+            isAgentMeta = taskLabel !== null;
 
             let result;
-            if (row.tool_name === 'ping') {
+            if (isAgentMeta) {
+                if (!taskLabel)
+                    throw new Error('DC_AGENT_META requires TASK=<task label>');
+                await this.setAgentTask(agent, taskLabel);
                 result = {
-                    content: [{ type: 'text', text: `pong ${new Date().toISOString()}` }]
+                    content: [{ type: 'text', text: `DC_AGENT_META_OK\nTASK=${taskLabel}` }]
                 };
-            }
-            else if (row.tool_name === 'shutdown') {
-                result = {
-                    content: [{ type: 'text', text: `Auto-spawn instance shutdown initialized at ${new Date().toISOString()}` }]
-                };
-                destroyAfterReply = true;
             }
             else {
-                result = await this.desktop.callClientTool(row.tool_name, row.tool_args, row.metadata || {});
+                this.writeJson(agent.socket, {
+                    type: 'call',
+                    callId: row.id,
+                    toolName: row.tool_name,
+                    toolArgs: row.tool_args
+                });
+
+                if (row.tool_name === 'ping') {
+                    result = {
+                        content: [{ type: 'text', text: `pong ${new Date().toISOString()}` }]
+                    };
+                }
+                else if (row.tool_name === 'shutdown') {
+                    result = {
+                        content: [{ type: 'text', text: `Auto-spawn instance shutdown initialized at ${new Date().toISOString()}` }]
+                    };
+                    destroyAfterReply = true;
+                }
+                else {
+                    result = await this.desktop.callClientTool(row.tool_name, row.tool_args, row.metadata || {});
+                }
             }
 
             const outputBytes = Buffer.byteLength(JSON.stringify(result?.content ?? result ?? ''), 'utf8');
-            this.writeJson(agent.socket, {
-                type: 'result',
-                callId,
-                ok: true,
-                summary: summarizeToolResult(result),
-                outputBytes
-            });
+            if (!isAgentMeta) {
+                this.writeJson(agent.socket, {
+                    type: 'result',
+                    callId,
+                    ok: true,
+                    summary: summarizeToolResult(result),
+                    outputBytes
+                });
+            }
 
             await this.remoteChannel.updateCallResult(callId, 'completed', result);
             await this.notifyAgentResult(agent, callId);
         }
         catch (error) {
-            if (agent.socket && !agent.socket.destroyed) {
+            if (!isAgentMeta && agent.socket && !agent.socket.destroyed) {
                 this.writeJson(agent.socket, {
                     type: 'result',
                     callId,
