@@ -38,7 +38,7 @@ The first non-management tool call to that gateway returns `DC_INSTANCE_ASSIGNED
 
 ## Local statistics dashboard
 
-Set `DC_STATS_SERVER=true` on the main Remote entry process. The dashboard is available at `http://127.0.0.1:17891` and exposes only read-only local HTTP endpoints. Each tool call appends one JSON object to a daily `traffic-YYYY-MM-DD.jsonl` file. The dashboard aggregates daily/hourly usage, tool and task rankings, failures, duration, payload bytes, and estimated text tokens. It never stores tool arguments or tool result bodies.
+Set `DC_STATS_SERVER=true` on the main Remote entry process. The dashboard is available at `http://127.0.0.1:17891` and exposes only read-only local HTTP endpoints. Each tool call appends one JSON object to a daily `traffic-YYYY-MM-DD.jsonl` file. The dashboard aggregates daily/hourly usage, tool and task rankings, failures, duration, payload bytes, and estimated text tokens. It never stores tool arguments or tool result bodies. The UI is loaded from `dist/dc-stats-dashboard.html` on every page request; editing that file does not require restarting Desktop Commander, and open dashboard tabs poll its version and reload automatically.
 
 On first start, the dashboard performs a one-time best-effort history import. It reads `~/.claude-server-commander/tool-history.jsonl` for recent calls with outputs/duration and `dcTokenMeter`, plus `claude_tool_call*.log` for older input-side calls. Consecutive meter records are restored per call; gaps or capped outputs are reconciled against each session's final cumulative meter so overall historical token/byte totals stay close to the original meter. Older argument-only records are marked input-only. The import is idempotent and recorded in `history-import-v1.json`.
 

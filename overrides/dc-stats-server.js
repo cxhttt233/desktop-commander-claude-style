@@ -2,11 +2,24 @@ import http from 'http';
 import os from 'os';
 import path from 'path';
 import { promises as fs } from 'fs';
+import { fileURLToPath } from 'url';
 import { measureArgs, measureResult } from './dc-traffic-meter.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 17891;
 const MAX_DAYS = 365;
+const DASHBOARD_FILE = process.env.DC_STATS_DASHBOARD_FILE ||
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'dc-stats-dashboard.html');
+
+async function dashboardPage() {
+    try { return await fs.readFile(DASHBOARD_FILE, 'utf8'); }
+    catch { return PAGE + PAGE2 + PAGE3; }
+}
+
+async function dashboardVersion() {
+    try { return Math.round((await fs.stat(DASHBOARD_FILE)).mtimeMs); }
+    catch { return 0; }
+}
 
 function localDay(value = Date.now()) {
     const d = new Date(value);
@@ -477,6 +490,7 @@ export class DCStatsServer {
                 const url = new URL(req.url || '/', 'http://' + this.host);
                 if (req.method !== 'GET') return json(res, 405, { error: 'GET only' });
                 if (url.pathname === '/health') return json(res, 200, { ok: true, host: this.host, port: this.port });
+                if (url.pathname === '/api/ui-version') return json(res, 200, { version: await dashboardVersion() });
                 if (url.pathname === '/api/summary') {
                     const days = parseDays(url);
                     const recovery = this.recoveryPromise ? await this.recoveryPromise : null;
@@ -484,7 +498,7 @@ export class DCStatsServer {
                     return json(res, 200, { ...aggregate(events, days), recovery });
                 }
                 if (url.pathname === '/' || url.pathname === '/index.html') {
-                    const body = PAGE + PAGE2 + PAGE3;
+                    const body = await dashboardPage();
                     res.writeHead(200, {
                         'Content-Type': 'text/html; charset=utf-8',
                         'Content-Length': Buffer.byteLength(body),

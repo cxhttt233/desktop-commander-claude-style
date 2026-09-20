@@ -6,7 +6,9 @@ import path from 'path';
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dc-stats-'));
 const statsDir = path.join(root, 'stats');
 const historyDir = path.join(root, 'history');
+const dashboardFile = path.join(root, 'dashboard.html');
 await fs.mkdir(historyDir, { recursive: true });
+await fs.writeFile(dashboardFile, '<!doctype html><title>UI_A</title>', 'utf8');
 
 const now = Date.now();
 const legacyTs = new Date(now - 3 * 86400000).toISOString();
@@ -39,6 +41,7 @@ process.env.DC_STATS_SERVER = 'true';
 process.env.DC_STATS_DIR = statsDir;
 process.env.DC_HISTORY_DIR = historyDir;
 process.env.DC_STATS_PORT = '17991';
+process.env.DC_STATS_DASHBOARD_FILE = dashboardFile;
 
 const { dcStats } = await import('../overrides/dc-stats-server.js?test=' + Date.now());
 dcStats.start();
@@ -63,6 +66,15 @@ assert.equal(data.recovery.legacyImported, 1);
 assert.equal(data.range.calls, 5);
 assert.equal(data.range.failures, 1);
 assert.equal(data.tasks.find((x) => x.name === '统计测试').calls, 2);
+const ui1 = await fetch('http://127.0.0.1:17991/').then((r) => r.text());
+const ver1 = await fetch('http://127.0.0.1:17991/api/ui-version').then((r) => r.json());
+assert(ui1.includes('UI_A'));
+await new Promise((resolve) => setTimeout(resolve, 20));
+await fs.writeFile(dashboardFile, '<!doctype html><title>UI_B</title>', 'utf8');
+const ui2 = await fetch('http://127.0.0.1:17991/').then((r) => r.text());
+const ver2 = await fetch('http://127.0.0.1:17991/api/ui-version').then((r) => r.json());
+assert(ui2.includes('UI_B'), 'dashboard HTML should hot-load without server restart');
+assert.notEqual(ver1.version, ver2.version, 'dashboard version should change after file edit');
 
 await dcStats.close();
 dcStats.start();
