@@ -1,5 +1,6 @@
 import net from 'net';
 import process from 'process';
+import { spawnSync } from 'child_process';
 import { dcTerminalStatus } from './dc-terminal-status.js';
 
 function arg(name) {
@@ -18,6 +19,36 @@ if (!port || !secret || !instanceId || !deviceId || !deviceName) {
     process.exit(2);
 }
 
+function disableWindowsQuickEdit() {
+    if (process.platform !== 'win32' || !process.stdin.isTTY)
+        return;
+    const script = `
+$src = @'
+using System;
+using System.Runtime.InteropServices;
+public static class DCConsoleMode {
+    [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr GetStdHandle(int nStdHandle);
+    [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+    [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+}
+'@
+Add-Type -TypeDefinition $src -ErrorAction SilentlyContinue | Out-Null
+$handle = [DCConsoleMode]::GetStdHandle(-10)
+[uint32]$mode = 0
+if ([DCConsoleMode]::GetConsoleMode($handle, [ref]$mode)) {
+    [uint32]$next = ($mode -bor 0x80) -band 0xFFFFFFBF
+    [void][DCConsoleMode]::SetConsoleMode($handle, $next)
+}
+`;
+    try {
+        spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+            stdio: ['inherit', 'ignore', 'ignore']
+        });
+    }
+    catch {}
+}
+
+disableWindowsQuickEdit();
 process.stdout.write(`\x1b]0;Desktop Commander · ${deviceName}\x07`);
 console.log('🚀 Desktop Commander Remote Worker');
 console.log(`   - Device ID:    ${deviceId}`);
