@@ -57,15 +57,20 @@ await dcStats.record({
   durationMs: 250, inputTokens: 8, outputTokens: 0,
   inputBytes: 80, outputBytes: 0, taskLabel: '统计测试'
 });
+await dcStats.record({
+  eventId: 'live:dedupe', ts: now + 200, tool: 'list_sessions', status: 'ok',
+  durationMs: 80, inputTokens: 0, outputTokens: 5,
+  inputBytes: 2, outputBytes: 40, taskLabel: '统计测试'
+});
 
 let data = await fetch('http://127.0.0.1:17991/api/summary?days=7').then((r) => r.json());
 assert.equal(dcStats.server.address().address, '127.0.0.1');
 assert.equal(data.recovery.imported, 3);
 assert.equal(data.recovery.richMeter, 2);
 assert.equal(data.recovery.legacyImported, 1);
-assert.equal(data.range.calls, 5);
+assert.equal(data.range.calls, 6);
 assert.equal(data.range.failures, 1);
-assert.equal(data.tasks.find((x) => x.name === '统计测试').calls, 2);
+assert.equal(data.tasks.find((x) => x.name === '统计测试').calls, 3);
 const ui1 = await fetch('http://127.0.0.1:17991/').then((r) => r.text());
 const ver1 = await fetch('http://127.0.0.1:17991/api/ui-version').then((r) => r.json());
 assert(ui1.includes('UI_A'));
@@ -77,6 +82,17 @@ assert(ui2.includes('UI_B'), 'dashboard HTML should hot-load without server rest
 assert.notEqual(ver1.version, ver2.version, 'dashboard version should change after file edit');
 
 await dcStats.close();
+
+// Simulate an older pre-v2 history row that has no dcTokenMeter because a
+// large output was capped before the meter was attached. It corresponds to the
+// already-recorded live:list_sessions row and must not be imported a second time.
+await fs.appendFile(path.join(historyDir, 'tool-history.jsonl'), JSON.stringify({
+  timestamp: new Date(now + 300).toISOString(),
+  toolName: 'list_sessions',
+  arguments: {},
+  output: { content: [{ type: 'text', text: '[output omitted from history: 40 bytes, over the 4096-byte cap]' }] },
+  duration: 80
+}) + '\n', 'utf8');
 
 // Simulate a later Desktop Commander process/session that completed a call in
 // tool-history while the live stats append was missed (for example, a gateway
@@ -98,7 +114,7 @@ await fs.appendFile(path.join(historyDir, 'tool-history.jsonl'), JSON.stringify(
 dcStats.start();
 await new Promise((resolve) => setTimeout(resolve, 100));
 data = await fetch('http://127.0.0.1:17991/api/summary?days=7').then((r) => r.json());
-assert.equal(data.range.calls, 6, 'a later restart must recover newly available history');
+assert.equal(data.range.calls, 7, 'a later restart must recover the missing call without duplicating old capped history');
 assert.equal(data.recovery.imported, 1, 'second recovery should import only the new call');
 assert.equal(data.recovery.version, 2);
 
@@ -106,7 +122,7 @@ await dcStats.close();
 dcStats.start();
 await new Promise((resolve) => setTimeout(resolve, 100));
 data = await fetch('http://127.0.0.1:17991/api/summary?days=7').then((r) => r.json());
-assert.equal(data.range.calls, 6, 'repeatable history recovery must remain idempotent');
+assert.equal(data.range.calls, 7, 'repeatable history recovery must remain idempotent');
 assert.equal(data.recovery.imported, 0, 'third recovery should not duplicate rows');
 
 console.log('STATS_TEST_OK', JSON.stringify({
