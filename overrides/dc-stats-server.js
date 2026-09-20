@@ -176,20 +176,47 @@ function deltaMetric(current, previous, field) {
     return Math.max(0, (Number(current?.[field]) || 0) - (Number(previous?.[field]) || 0));
 }
 
-async function existingEventIds(dir) {
+async function existingEventIndex(dir) {
     const ids = new Set();
+    const rows = [];
     let names = [];
-    try { names = await fs.readdir(dir); } catch { return ids; }
+    try { names = await fs.readdir(dir); } catch { return { ids, rows }; }
     for (const name of names.filter((x) => /^traffic-\d{4}-\d{2}-\d{2}\.jsonl$/.test(x))) {
         let text = '';
         try { text = await fs.readFile(path.join(dir, name), 'utf8'); } catch { continue; }
         for (const line of text.split(/\r?\n/)) {
             if (!line.trim()) continue;
             const row = parseJson(line);
-            if (row?.eventId) ids.add(row.eventId);
+            if (!row) continue;
+            rows.push(row);
+            if (row.eventId) ids.add(row.eventId);
         }
     }
-    return ids;
+    return { ids, rows };
+}
+
+function matchesExistingLiveHistory(liveRows, usedRows, candidate) {
+    let bestIndex = -1;
+    let bestScore = Infinity;
+    for (let i = 0; i < liveRows.length; i += 1) {
+        if (usedRows.has(i)) continue;
+        const row = liveRows[i];
+        if (row.tool !== candidate.tool) continue;
+        if ((Number(row.inputTokens) || 0) !== candidate.inputTokens) continue;
+        if ((Number(row.inputBytes) || 0) !== candidate.inputBytes) continue;
+        const timeDelta = Math.abs((Number(row.ts) || 0) - candidate.ts);
+        if (timeDelta > 15000) continue;
+        const durationDelta = Math.abs((Number(row.durationMs) || 0) - candidate.durationMs);
+        if (durationDelta > 15000) continue;
+        const score = timeDelta + durationDelta;
+        if (score < bestScore) {
+            bestScore = score;
+            bestIndex = i;
+        }
+    }
+    if (bestIndex < 0) return false;
+    usedRows.add(bestIndex);
+    return true;
 }
 
 async function appendRecoveredRows(dir, rows) {
@@ -209,7 +236,10 @@ async function recoverExistingHistory(dir) {
     let previousState = null;
     try { previousState = JSON.parse(await fs.readFile(stateFile, 'utf8')); } catch {}
     await fs.mkdir(dir, { recursive: true });
-    const ids = await existingEventIds(dir);
+    const existing = await existingEventIndex(dir);
+    const ids = existing.ids;
+    const liveRows = existing.rows.filter((row) => row?.source === 'live');
+    const matchedLiveRows = new Set();
     const home = process.env.DC_HISTORY_DIR || path.join(os.homedir(), '.claude-server-commander');
     const historyFile = path.join(home, 'tool-history.jsonl');
     const rows = [];
@@ -299,6 +329,15 @@ async function recoverExistingHistory(dir) {
         });
 
         if (ids.has(eventId)) continue;
+        if (!meter && matchesExistingLiveHistory(liveRows, matchedLiveRows, {
+            ts,
+            tool: record.toolName || 'unknown',
+            durationMs: Number(record.duration) || 0,
+            inputTokens,
+            inputBytes
+        })) {
+            continue;
+        }
         ids.add(eventId);
         rows.push({
             eventId, ts, tool: record.toolName || 'unknown',
