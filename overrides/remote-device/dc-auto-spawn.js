@@ -13,6 +13,7 @@ const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const WORKER_CONNECT_TIMEOUT_MS = 20000;
 const HEARTBEAT_INTERVAL_MS = 15 * 1000;
+const REDIRECT_COALESCE_MS = 1000;
 const MANAGED_CAPABILITY = 'dc_auto_spawn_v1';
 
 function safeId(value) {
@@ -21,6 +22,28 @@ function safeId(value) {
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function redirectScope(metadata = {}) {
+    const roots = [metadata, metadata?.clientInfo, metadata?.client_info].filter(Boolean);
+    const fields = [
+        'conversationId', 'conversation_id',
+        'threadId', 'thread_id',
+        'sessionId', 'session_id',
+        'chatId', 'chat_id'
+    ];
+    for (const root of roots) {
+        for (const field of fields) {
+            const value = root?.[field];
+            if (value == null || String(value).trim() === '')
+                continue;
+            return 'meta:' + crypto.createHash('sha256')
+                .update(String(value).trim())
+                .digest('hex')
+                .slice(0, 24);
+        }
+    }
+    return null;
 }
 
 export class DCAutoSpawnManager {
@@ -33,6 +56,7 @@ export class DCAutoSpawnManager {
         this.ttlMs = Math.max(60000, Number(process.env.DC_AUTO_SPAWN_TTL_MS) || DEFAULT_TTL_MS);
         this.agents = new Map();
         this.pendingWorkers = new Map();
+        this.redirectAllocations = new Map();
         this.server = null;
         this.port = null;
         this.cleanupTimer = null;
@@ -89,7 +113,30 @@ export class DCAutoSpawnManager {
         this.server.unref?.();
     }
 
-    async allocateRedirect(initialCallId) {
+    async allocateRedirect(initialCallId, metadata = {}) {
+        const scope = redirectScope(metadata);
+        const key = scope || '__concurrent_fallback__';
+        const existing = this.redirectAllocations.get(key);
+        if (existing && (scope || Date.now() - existing.startedAt <= REDIRECT_COALESCE_MS)) {
+            console.log(`♻️ Reusing pending auto-spawn allocation for ${scope ? 'conversation' : 'parallel gateway calls'}`);
+            return existing.promise;
+        }
+
+        const entry = {
+            startedAt: Date.now(),
+            promise: this.createRedirect(initialCallId)
+        };
+        this.redirectAllocations.set(key, entry);
+        try {
+            return await entry.promise;
+        }
+        finally {
+            if (this.redirectAllocations.get(key) === entry)
+                this.redirectAllocations.delete(key);
+        }
+    }
+
+    async createRedirect(initialCallId) {
         const instanceId = safeId(initialCallId) || crypto.randomUUID().replaceAll('-', '');
         const shortId = instanceId.slice(0, 8);
         const deviceName = `${os.hostname()}-agent-${shortId}`;
