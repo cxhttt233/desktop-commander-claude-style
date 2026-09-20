@@ -31,6 +31,7 @@ class DCTerminalStatusLine {
         this.lastFrameAt = 0;
         this.verbs = this.loadVerbs();
         this.currentVerb = 'DC';
+        this.lastBusyVerb = '';
         this.nextVerbAt = 0;
 
         this.animationStarted = 0;
@@ -241,8 +242,12 @@ class DCTerminalStatusLine {
         this.settling = false;
         this.lastFrameAt = 0;
         if (wasIdle) {
-            this.currentVerb = this.pickVerb();
-            this.nextVerbAt = Date.now() + 4000 + Math.floor(Math.random() * 3000);
+            const now = Date.now();
+            if (!this.lastBusyVerb || now >= this.nextVerbAt) {
+                this.lastBusyVerb = this.pickVerb();
+                this.nextVerbAt = now + 12000 + Math.floor(Math.random() * 8000);
+            }
+            this.currentVerb = this.lastBusyVerb;
         }
 
         let inputBytes = 0;
@@ -272,7 +277,6 @@ class DCTerminalStatusLine {
             if (this.busy === 0) {
                 this.settling = false;
                 this.currentVerb = 'DC';
-                this.nextVerbAt = 0;
                 this.writeMark(true);
                 this.writeStatus(true);
             }
@@ -297,8 +301,8 @@ class DCTerminalStatusLine {
         this.animating = true;
         this.settling = this.busy === 0;
         if (this.settling) {
-            this.currentVerb = this.pickVerb();
-            this.nextVerbAt = Date.now() + 2000 + Math.floor(Math.random() * 1000);
+            // Keep the current verb through the short completion animation.
+            // Preserve nextVerbAt so consecutive short calls reuse the same word.
         }
         this.writeMark(true);
         this.writeStatus(true);
@@ -313,11 +317,10 @@ class DCTerminalStatusLine {
             this.lastFrameAt = now;
             this.writeMark();
         }
-        if (visualBusy && now >= this.nextVerbAt) {
-            this.currentVerb = this.pickVerb();
-            this.nextVerbAt = this.settling
-                ? now + 2000 + Math.floor(Math.random() * 1000)
-                : now + 4000 + Math.floor(Math.random() * 3000);
+        if (visualBusy && !this.settling && now >= this.nextVerbAt) {
+            this.lastBusyVerb = this.pickVerb();
+            this.currentVerb = this.lastBusyVerb;
+            this.nextVerbAt = now + 12000 + Math.floor(Math.random() * 8000);
             this.writeStatus();
         }
 
@@ -338,7 +341,6 @@ class DCTerminalStatusLine {
             if (this.busy === 0) {
                 this.settling = false;
                 this.currentVerb = 'DC';
-                this.nextVerbAt = 0;
                 this.writeMark(true);
                 this.writeStatus(true);
             }
