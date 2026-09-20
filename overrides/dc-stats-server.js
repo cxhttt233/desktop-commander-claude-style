@@ -205,8 +205,9 @@ async function appendRecoveredRows(dir, rows) {
 }
 
 async function recoverExistingHistory(dir) {
-    const stateFile = path.join(dir, 'history-import-v1.json');
-    try { return JSON.parse(await fs.readFile(stateFile, 'utf8')); } catch {}
+    const stateFile = path.join(dir, 'history-recovery-v2.json');
+    let previousState = null;
+    try { previousState = JSON.parse(await fs.readFile(stateFile, 'utf8')); } catch {}
     await fs.mkdir(dir, { recursive: true });
     const ids = await existingEventIds(dir);
     const home = process.env.DC_HISTORY_DIR || path.join(os.homedir(), '.claude-server-commander');
@@ -380,8 +381,9 @@ async function recoverExistingHistory(dir) {
     const importedCalls = rows.reduce((sum, row) =>
         sum + (row.callsCount == null ? 1 : Math.max(0, Number(row.callsCount) || 0)), 0);
     const state = {
-        version: 1,
+        version: 2,
         completedAt: new Date().toISOString(),
+        previousCompletedAt: previousState?.completedAt || null,
         imported: importedCalls,
         importedRows: rows.length,
         richRecords: rich.length,
@@ -391,7 +393,9 @@ async function recoverExistingHistory(dir) {
         sessionCorrections,
         firstRichTimestamp: Number.isFinite(firstRichTs) ? new Date(firstRichTs).toISOString() : null
     };
-    await fs.writeFile(stateFile, JSON.stringify(state, null, 2), 'utf8');
+    const stateTemp = stateFile + '.' + process.pid + '.tmp';
+    await fs.writeFile(stateTemp, JSON.stringify(state, null, 2), 'utf8');
+    await fs.rename(stateTemp, stateFile);
     return state;
 }
 
@@ -467,11 +471,14 @@ export class DCStatsServer {
         if (this.recoveryPromise) await this.recoveryPromise.catch(() => null);
         const row = { ...event, ts: event.ts || Date.now(), source: event.source || 'live' };
         const file = path.join(this.dir, 'traffic-' + localDay(row.ts) + '.jsonl');
-        this.writeChain = this.writeChain.then(async () => {
+        const write = this.writeChain.catch(() => {}).then(async () => {
             await fs.mkdir(this.dir, { recursive: true });
             await fs.appendFile(file, JSON.stringify(row) + '\n', 'utf8');
-        }).catch(() => {});
-        return this.writeChain;
+        });
+        this.writeChain = write.catch((error) => {
+            console.warn('[DC stats] could not append traffic row:', error?.message || error);
+        });
+        return write;
     }
 
     start() {
