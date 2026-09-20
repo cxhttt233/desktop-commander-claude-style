@@ -14,6 +14,7 @@ const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const WORKER_CONNECT_TIMEOUT_MS = 20000;
 const HEARTBEAT_INTERVAL_MS = 15 * 1000;
 const REDIRECT_COALESCE_MS = 1000;
+const SCOPED_REDIRECT_REUSE_MS = 30 * 1000;
 const MANAGED_CAPABILITY = 'dc_auto_spawn_v1';
 
 function safeId(value) {
@@ -128,11 +129,23 @@ export class DCAutoSpawnManager {
         };
         this.redirectAllocations.set(key, entry);
         try {
-            return await entry.promise;
+            const result = await entry.promise;
+            if (scope) {
+                const timer = setTimeout(() => {
+                    if (this.redirectAllocations.get(key) === entry)
+                        this.redirectAllocations.delete(key);
+                }, SCOPED_REDIRECT_REUSE_MS);
+                timer.unref?.();
+            }
+            else if (this.redirectAllocations.get(key) === entry) {
+                this.redirectAllocations.delete(key);
+            }
+            return result;
         }
-        finally {
+        catch (error) {
             if (this.redirectAllocations.get(key) === entry)
                 this.redirectAllocations.delete(key);
+            throw error;
         }
     }
 
