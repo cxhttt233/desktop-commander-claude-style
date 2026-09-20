@@ -77,10 +77,37 @@ assert(ui2.includes('UI_B'), 'dashboard HTML should hot-load without server rest
 assert.notEqual(ver1.version, ver2.version, 'dashboard version should change after file edit');
 
 await dcStats.close();
+
+// Simulate a later Desktop Commander process/session that completed a call in
+// tool-history while the live stats append was missed (for example, a gateway
+// crash immediately after the tool result).
+const rich3Ts = new Date(now + 1000).toISOString();
+const meter3 = {
+  inputTokens: 9, outputTokens: 11, calls: 1,
+  inputBytes: 90, outputBytes: 110,
+  sessionStarted: now + 500
+};
+await fs.appendFile(path.join(historyDir, 'tool-history.jsonl'), JSON.stringify({
+  timestamp: rich3Ts,
+  toolName: 'read_file',
+  arguments: { path: 'recovered-after-restart.txt' },
+  output: { content: [{ type: 'text', text: 'late' }], _meta: { dcTokenMeter: meter3 } },
+  duration: 80
+}) + '\n', 'utf8');
+
 dcStats.start();
 await new Promise((resolve) => setTimeout(resolve, 100));
 data = await fetch('http://127.0.0.1:17991/api/summary?days=7').then((r) => r.json());
-assert.equal(data.range.calls, 5, 'history recovery must be idempotent');
+assert.equal(data.range.calls, 6, 'a later restart must recover newly available history');
+assert.equal(data.recovery.imported, 1, 'second recovery should import only the new call');
+assert.equal(data.recovery.version, 2);
+
+await dcStats.close();
+dcStats.start();
+await new Promise((resolve) => setTimeout(resolve, 100));
+data = await fetch('http://127.0.0.1:17991/api/summary?days=7').then((r) => r.json());
+assert.equal(data.range.calls, 6, 'repeatable history recovery must remain idempotent');
+assert.equal(data.recovery.imported, 0, 'third recovery should not duplicate rows');
 
 console.log('STATS_TEST_OK', JSON.stringify({
   address: dcStats.server.address().address,
