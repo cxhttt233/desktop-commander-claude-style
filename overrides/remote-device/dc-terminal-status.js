@@ -242,7 +242,7 @@ class DCTerminalStatusLine {
         this.lastFrameAt = 0;
         if (wasIdle) {
             this.currentVerb = this.pickVerb();
-            this.nextVerbAt = Date.now() + 1800 + Math.floor(Math.random() * 1600);
+            this.nextVerbAt = Date.now() + 4000 + Math.floor(Math.random() * 3000);
         }
 
         let inputBytes = 0;
@@ -298,7 +298,7 @@ class DCTerminalStatusLine {
         this.settling = this.busy === 0;
         if (this.settling) {
             this.currentVerb = this.pickVerb();
-            this.nextVerbAt = Date.now() + 700 + Math.floor(Math.random() * 500);
+            this.nextVerbAt = Date.now() + 2000 + Math.floor(Math.random() * 1000);
         }
         this.writeMark(true);
         this.writeStatus(true);
@@ -316,8 +316,8 @@ class DCTerminalStatusLine {
         if (visualBusy && now >= this.nextVerbAt) {
             this.currentVerb = this.pickVerb();
             this.nextVerbAt = this.settling
-                ? now + 700 + Math.floor(Math.random() * 500)
-                : now + 1800 + Math.floor(Math.random() * 1600);
+                ? now + 2000 + Math.floor(Math.random() * 1000)
+                : now + 4000 + Math.floor(Math.random() * 3000);
             this.writeStatus();
         }
 
