@@ -142,16 +142,14 @@ export class DCAutoSpawnManager {
                         'DC_INSTANCE_ASSIGNED',
                         `deviceId: ${agent.deviceId}`,
                         `deviceName: ${agent.deviceName}`,
-                        `instanceId: ${agent.instanceId}`,
+                        `gatewayDeviceId: ${this.parentDeviceId}`,
                         '',
-                        'Before retrying the original tool call, register a short Chinese task label on this device.',
-                        'Call start_process on this deviceId with exactly this two-line format:',
+                        'REGISTER_TASK',
                         '# DC_AGENT_META',
-                        'TASK=<6-20个字，说明为什么创建这个子Agent>',
-                        'This metadata command is intercepted by Desktop Commander and is not executed in the shell.',
-                        'Then retry the original Desktop Commander tool call on this deviceId.',
-                        'Use this deviceId for all subsequent Desktop Commander calls in this conversation.',
-                        'This temporary instance is automatically deleted after 24 hours without a tool call.'
+                        'TASK=<6-20字中文任务>',
+                        '',
+                        'RECOVERY',
+                        'Keep this deviceId for this conversation. If it is lost/stale or a DC call says "device not found", call list_devices before saying DC is unavailable. Recover only the child whose dc_auto_spawn_v1.task_label matches this conversation; if none exists, allocate a new child from gatewayDeviceId.'
                     ].join('\n')
                 }]
             };
@@ -275,7 +273,8 @@ export class DCAutoSpawnManager {
         const marker = {
             parent_device_id: this.parentDeviceId,
             instance_id: agent.instanceId,
-            ttl_ms: this.ttlMs
+            ttl_ms: this.ttlMs,
+            task_label: agent.taskLabel || null
         };
         const { error } = await this.remoteChannel.client
             .from('mcp_devices')
@@ -367,6 +366,27 @@ export class DCAutoSpawnManager {
         catch {}
         profile.taskLabel = taskLabel;
         await fs.writeFile(profilePath, JSON.stringify(profile, null, 2), 'utf8');
+
+        const marker = {
+            parent_device_id: this.parentDeviceId,
+            instance_id: agent.instanceId,
+            ttl_ms: this.ttlMs,
+            task_label: taskLabel
+        };
+        const { error } = await this.remoteChannel.client
+            .from('mcp_devices')
+            .update({
+                capabilities: {
+                    app_version: VERSION,
+                    transport_broadcast_v1: true,
+                    [MANAGED_CAPABILITY]: marker
+                },
+                last_seen: new Date().toISOString()
+            })
+            .eq('id', agent.deviceId);
+        if (error)
+            throw new Error(`Could not persist auto-spawn task label: ${error.message}`);
+
         this.writeJson(agent.socket, { type: 'meta', taskLabel });
     }
 
@@ -402,7 +422,14 @@ export class DCAutoSpawnManager {
                     throw new Error('DC_AGENT_META requires TASK=<task label>');
                 await this.setAgentTask(agent, taskLabel);
                 result = {
-                    content: [{ type: 'text', text: `DC_AGENT_META_OK\nTASK=${taskLabel}` }]
+                    content: [{
+                        type: 'text',
+                        text: [
+                            'DC_AGENT_META_OK',
+                            `TASK=${taskLabel}`,
+                            `RECOVERY: If this device is lost/stale, call list_devices and find dc_auto_spawn_v1.task_label="${taskLabel}" before saying DC is unavailable; if no match, allocate a new child from gatewayDeviceId=${this.parentDeviceId}.`
+                        ].join('\n')
+                    }]
                 };
             }
             else {

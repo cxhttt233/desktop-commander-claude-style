@@ -14,6 +14,7 @@
 - Stabilize Claude-style activity verbs across consecutive short calls: reuse the same word across idle gaps, keep it through settling, and only rotate during sustained work after roughly 12–20 seconds.
 - Add a fixed child-agent task header. New auto-spawn sessions request a `# DC_AGENT_META` / `TASK=...` label, persist it in `instance.json`, and show `子 Agent · <任务>` at the top without executing or counting the metadata command.
 - Add lightweight main-Remote startup lifecycle logging (`START`, `EXIT`, `ERROR`) without redirecting stdout/stderr or changing TTY behavior, for diagnosing intermittent launcher failures.
+- Add a concise AI recovery hint to `DC_INSTANCE_ASSIGNED` / `DC_AGENT_META_OK`, and publish the Chinese task label as `dc_auto_spawn_v1.task_label` so `list_devices` can recover the correct conversation child instead of declaring DC unavailable too early.
 - Clean up orphaned temporary devices on gateway restart and delete a temporary device if its window crashes.
 
 ## R16
