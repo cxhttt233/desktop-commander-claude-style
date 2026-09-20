@@ -387,24 +387,27 @@ const PAGE = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Desktop Commander · 使用统计</title>
 <style>
-:root{color-scheme:dark;--bg:#0b1020;--panel:#11182b;--line:#24304b;--muted:#8fa0bd;--text:#eef4ff;--accent:#64b5ff;--green:#68d391;--red:#ff7b7b}
-*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#0a0f1d,#0d1324 45%,#0a0f1d);color:var(--text);font:14px/1.45 system-ui,"Microsoft YaHei",sans-serif}
-main{max-width:1440px;margin:auto;padding:28px}.top{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:20px}
-h1{font-size:24px;margin:0 0 4px}.sub{color:var(--muted)}.ranges{display:flex;gap:8px}
-button{background:#151f35;border:1px solid var(--line);color:var(--text);padding:7px 12px;border-radius:8px;cursor:pointer}
-button.on{border-color:var(--accent);color:#bfe3ff}.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin:16px 0}
-.card,.panel{background:rgba(17,24,43,.94);border:1px solid var(--line);border-radius:12px}.card{padding:16px}
-.k{color:var(--muted);font-size:12px}.v{font-size:23px;font-weight:700;margin-top:5px}.grid{display:grid;grid-template-columns:1.6fr 1fr;gap:12px;margin:12px 0}
-.panel{padding:16px;min-width:0}.panel h2{font-size:15px;margin:0 0 12px}canvas{width:100%;height:220px;display:block}
-table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px 7px;border-bottom:1px solid #202b43;text-align:right;white-space:nowrap}
-th:first-child,td:first-child{text-align:left}th{color:var(--muted);font-weight:500}.bad{color:var(--red)}.ok{color:var(--green)}
-@media(max-width:1050px){.cards{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}}@media(max-width:650px){main{padding:16px}.cards{grid-template-columns:repeat(2,1fr)}.top{align-items:start;flex-direction:column}}
+:root{color-scheme:dark;--bg:#080c15;--panel:#101827;--panel2:#0d1421;--line:rgba(148,163,184,.14);--muted:#7d8da7;--text:#eef5ff;--accent:#68b9ff;--purple:#9187ff;--green:#5bd3a1;--red:#ff7c8b}
+*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;min-height:100vh;background:radial-gradient(850px 480px at 12% -8%,rgba(65,132,255,.16),transparent 64%),radial-gradient(700px 420px at 95% 0%,rgba(129,104,255,.10),transparent 62%),var(--bg);color:var(--text);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+main{max-width:1540px;margin:auto;padding:30px 32px 44px}.top{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:22px;padding-bottom:3px}
+h1{font-size:28px;letter-spacing:-.03em;line-height:1.15;margin:0 0 8px;font-weight:720}h1:after{content:"LIVE";display:inline-block;vertical-align:middle;margin-left:10px;padding:3px 6px;border-radius:999px;background:rgba(91,211,161,.10);border:1px solid rgba(91,211,161,.22);color:#7fe0b5;font-size:9px;letter-spacing:.08em}
+.sub{color:var(--muted);font-size:12px}.ranges{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:10px;background:rgba(15,23,38,.8);box-shadow:0 10px 30px rgba(0,0,0,.15)}
+button{border:0;background:transparent;color:#8796ad;padding:7px 12px;border-radius:7px;cursor:pointer;font:inherit;transition:.16s ease}button:hover{color:#d6e2f3;background:rgba(255,255,255,.035)}
+button.on{color:#fff;background:linear-gradient(180deg,rgba(104,185,255,.22),rgba(104,185,255,.09));box-shadow:inset 0 0 0 1px rgba(104,185,255,.22)}
+.cards{display:grid;grid-template-columns:1.22fr repeat(5,1fr);gap:11px;margin:0 0 12px}.card,.panel{border:1px solid var(--line);background:linear-gradient(180deg,rgba(18,27,43,.92),rgba(12,19,31,.94));box-shadow:0 14px 38px rgba(0,0,0,.14),inset 0 1px rgba(255,255,255,.018)}
+.card{position:relative;overflow:hidden;min-height:118px;border-radius:14px;padding:17px 18px}.card:first-child{background:linear-gradient(135deg,rgba(45,111,190,.26),rgba(17,26,43,.94) 60%,rgba(92,73,177,.15));border-color:rgba(104,185,255,.23)}.card:first-child:after{content:"";position:absolute;width:150px;height:150px;border-radius:50%;right:-60px;top:-84px;background:radial-gradient(circle,rgba(104,185,255,.18),transparent 68%)}
+.k{position:relative;z-index:1;color:#8392aa;font-size:11px;letter-spacing:.01em}.v{position:relative;z-index:1;font-size:27px;font-weight:720;letter-spacing:-.035em;line-height:1.1;margin-top:12px}.card:first-child .v{font-size:32px}.meta{position:relative;z-index:1;margin-top:10px;color:#687890;font-size:10px}.meta strong{color:#a7b8cf;font-weight:600}
+.grid{display:grid;grid-template-columns:minmax(0,1.72fr) minmax(340px,.82fr);gap:12px;margin:12px 0}.panel{border-radius:14px;padding:18px;min-width:0}.panel h2{font-size:14px;color:#dbe7f7;font-weight:650;margin:0 0 13px}
+canvas{width:100%;height:248px;display:block;border-radius:8px}table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}th,td{padding:9px 9px;border-bottom:1px solid rgba(148,163,184,.09);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}th{color:#708099;font-size:10px;font-weight:600;letter-spacing:.02em}tbody tr:hover td{background:rgba(255,255,255,.018)}tbody tr:last-child td{border-bottom:0}.bad,.ok{font-weight:600}.bad{color:var(--red)}.ok{color:var(--green)}
+.panel>div[style*="overflow"]{border:1px solid rgba(148,163,184,.08);border-radius:10px;max-height:430px}section.panel:last-of-type{margin-top:12px}
+@media(max-width:1200px){.cards{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}}@media(max-width:700px){main{padding:20px 14px 32px}.cards{grid-template-columns:repeat(2,1fr)}.top{align-items:flex-start;flex-direction:column}.ranges{width:100%}.ranges button{flex:1}.v{font-size:23px}}
 </style></head><body><main>`;
 
 const PAGE2 = `
 <div class="top"><div><h1>Desktop Commander 使用统计</h1>
 <div class="sub" id="subtitle">仅本机访问 · Tokens 为 DC 工具载荷的估算文本量，不等同于模型账单 Token</div></div>
-<div class="ranges"><button data-d="7">7天</button><button data-d="30" class="on">30天</button><button data-d="90">90天</button></div></div>
+<div class="ranges"><button data-d="1">今日</button><button data-d="7">7天</button><button data-d="30" class="on">30天</button><button data-d="90">90天</button></div></div>
 <div class="cards" id="cards"></div>
 <div class="grid"><section class="panel"><h2>每日 Token 趋势</h2><canvas id="daily"></canvas></section>
 <section class="panel"><h2>24 小时调用分布</h2><canvas id="hourly"></canvas></section></div>
@@ -416,23 +419,24 @@ const PAGE2 = `
 <script>
 const f=n=>{n=Number(n)||0;if(n<1e3)return String(Math.round(n));if(n<1e6)return (n/1e3).toFixed(n<1e4?1:0)+'K';return (n/1e6).toFixed(n<1e7?2:1)+'M'};
 const fb=n=>{n=Number(n)||0;if(n<1024)return Math.round(n)+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB'};
-function table(rows){return '<table><thead><tr><th>名称</th><th>Tokens</th><th>调用</th><th>失败</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+f(x.totalTokens)+'</td><td>'+f(x.calls)+'</td><td>'+f(x.failures)+'</td></tr>').join('')+'</tbody></table>'}
+function table(rows){const m=Math.max(1,...rows.map(x=>x.totalTokens));return '<table><thead><tr><th>名称</th><th>Tokens</th><th>调用</th><th>失败</th></tr></thead><tbody>'+rows.map(x=>{const p=Math.max(2,x.totalTokens/m*100).toFixed(1);return '<tr><td style="background:linear-gradient(90deg,rgba(104,185,255,.08) '+p+'%,transparent '+p+'%)">'+esc(x.name)+'</td><td><strong>'+f(x.totalTokens)+'</strong></td><td>'+f(x.calls)+'</td><td class="'+(x.failures?'bad':'')+'">'+f(x.failures)+'</td></tr>'}).join('')+'</tbody></table>'}
 function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function chart(id,rows,label,value){const c=document.getElementById(id),r=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*r;c.height=h*r;const x=c.getContext('2d');x.scale(r,r);x.clearRect(0,0,w,h);const max=Math.max(1,...rows.map(value));const gap=4,bw=Math.max(2,(w-40)/rows.length-gap);rows.forEach((d,i)=>{const bh=(h-38)*value(d)/max;const px=30+i*(bw+gap);x.fillStyle='#4ea6eb';x.fillRect(px,h-24-bh,bw,bh);if(rows.length<=31||i%3===0){x.fillStyle='#8394b2';x.font='10px system-ui';x.textAlign='center';x.fillText(label(d),px+bw/2,h-7)}})}
+function dailyChart(rows){const c=document.getElementById('daily'),r=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*r;c.height=h*r;const x=c.getContext('2d');x.setTransform(r,0,0,r,0,0);x.clearRect(0,0,w,h);const p={l:48,r:16,t:16,b:30},cw=w-p.l-p.r,ch=h-p.t-p.b,mt=Math.max(1,...rows.map(v=>v.totalTokens)),mc=Math.max(1,...rows.map(v=>v.calls));x.font='10px system-ui';x.textAlign='right';for(let i=0;i<4;i++){const y=p.t+ch*i/3;x.strokeStyle='rgba(148,163,184,.09)';x.beginPath();x.moveTo(p.l,y);x.lineTo(w-p.r,y);x.stroke();x.fillStyle='#63738b';x.fillText(f(mt*(1-i/3)),p.l-7,y+3)}const step=cw/Math.max(1,rows.length-1),bw=Math.max(2,Math.min(11,cw/Math.max(1,rows.length)*.42));rows.forEach((v,i)=>{const px=p.l+(rows.length===1?cw/2:i*step),bh=ch*.28*v.calls/mc;x.fillStyle='rgba(145,135,255,.18)';x.fillRect(px-bw/2,p.t+ch-bh,bw,bh)});const pts=rows.map((v,i)=>[p.l+(rows.length===1?cw/2:i*step),p.t+ch-ch*v.totalTokens/mt]);const g=x.createLinearGradient(0,p.t,0,p.t+ch);g.addColorStop(0,'rgba(104,185,255,.26)');g.addColorStop(1,'rgba(104,185,255,0)');x.beginPath();pts.forEach((q,i)=>i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1]));if(pts.length){x.lineTo(pts[pts.length-1][0],p.t+ch);x.lineTo(pts[0][0],p.t+ch);x.closePath();x.fillStyle=g;x.fill()}x.beginPath();pts.forEach((q,i)=>i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1]));x.strokeStyle='#70bdff';x.lineWidth=2;x.lineJoin='round';x.stroke();const every=rows.length<=7?1:Math.max(1,Math.ceil(rows.length/7));x.textAlign='center';x.fillStyle='#64748b';rows.forEach((v,i)=>{if(i%every===0||i===rows.length-1)x.fillText(v.day.slice(5),pts[i][0],h-8)})}
+function hourlyChart(rows){const c=document.getElementById('hourly'),r=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*r;c.height=h*r;const x=c.getContext('2d');x.setTransform(r,0,0,r,0,0);x.clearRect(0,0,w,h);const max=Math.max(1,...rows.map(v=>v.calls)),gap=5,bw=Math.max(4,(w-32)/rows.length-gap);rows.forEach((v,i)=>{const bh=Math.max(3,(h-38)*v.calls/max),px=16+i*(bw+gap),gr=x.createLinearGradient(0,h-28-bh,0,h-28);gr.addColorStop(0,'rgba(104,185,255,.95)');gr.addColorStop(1,'rgba(104,185,255,.22)');x.fillStyle=gr;x.fillRect(px,h-28-bh,bw,bh);x.fillStyle='#64748b';x.font='9px system-ui';x.textAlign='center';x.fillText(String(v.hour).padStart(2,'0'),px+bw/2,h-9)})}
 `;
 
 const PAGE3 = `
 async function load(days=30){const d=await fetch('/api/summary?days='+days,{cache:'no-store'}).then(r=>r.json());
 const base='仅本机访问 · Tokens 为 DC 工具载荷的估算文本量，不等同于模型账单 Token';
 document.getElementById('subtitle').textContent=base+(d.recovery?.imported?' · 已恢复历史 '+f(d.recovery.imported)+' 次调用':'');
-const cards=[['今日 Tokens',f(d.today.totalTokens)],['区间 Tokens',f(d.range.totalTokens)],['调用次数',f(d.range.calls)],['输入 / 输出',f(d.range.inputTokens)+' / '+f(d.range.outputTokens)],['流量',fb(d.range.totalBytes)],['平均耗时',f(d.range.avgDurationMs)+' ms']];
-document.getElementById('cards').innerHTML=cards.map(x=>'<div class="card"><div class="k">'+x[0]+'</div><div class="v">'+x[1]+'</div></div>').join('');
-chart('daily',d.byDay,x=>x.day.slice(5),x=>x.totalTokens);chart('hourly',d.byHour,x=>String(x.hour).padStart(2,'0'),x=>x.calls);
+const failRate=d.range.calls?(d.range.failures/d.range.calls*100):0;const cards=[['区间 Tokens',f(d.range.totalTokens),(days===1?'今日':days+' 天')+' · 日均 '+f(Math.round(d.range.totalTokens/Math.max(1,d.byDay.filter(x=>x.calls>0).length)))],['今日 Tokens',f(d.today.totalTokens),'实时累计'],['调用次数',f(d.range.calls),'失败 '+f(d.range.failures)+' 次 · '+failRate.toFixed(2)+'%'],['输入 / 输出',f(d.range.inputTokens)+' / '+f(d.range.outputTokens),'工具载荷结构'],['载荷流量',fb(d.range.totalBytes),'输入 '+fb(d.range.inputBytes)+' · 输出 '+fb(d.range.outputBytes)],['平均耗时',f(d.range.avgDurationMs)+' ms','累计 '+f(d.range.durationMs)+' ms']];
+document.getElementById('cards').innerHTML=cards.map(x=>'<div class="card"><div class="k">'+x[0]+'</div><div class="v">'+x[1]+'</div><div class="meta">'+x[2]+'</div></div>').join('');
+dailyChart(d.byDay);hourlyChart(d.byHour);
 document.getElementById('tools').innerHTML=table(d.tools);document.getElementById('tasks').innerHTML=table(d.tasks);
 document.getElementById('recent').innerHTML=d.recent.map(x=>'<tr><td>'+new Date(x.ts).toLocaleString()+'</td><td>'+esc(x.taskLabel||'未标注')+'</td><td>'+esc(x.tool)+'</td><td class="'+(x.status==='error'?'bad':'ok')+'">'+esc(x.status)+'</td><td>'+f(x.inputTokens)+'</td><td>'+f(x.outputTokens)+'</td><td>'+f(x.durationMs)+' ms</td></tr>').join('');
 }
 document.querySelectorAll('button[data-d]').forEach(b=>b.onclick=()=>{document.querySelectorAll('button[data-d]').forEach(x=>x.classList.remove('on'));b.classList.add('on');load(Number(b.dataset.d))});
-addEventListener('resize',()=>{clearTimeout(window.__rt);window.__rt=setTimeout(()=>load(Number(document.querySelector('button.on').dataset.d)),100)});load();
+addEventListener('resize',()=>{clearTimeout(window.__rt);window.__rt=setTimeout(()=>load(Number(document.querySelector('button.on').dataset.d)),100)});document.addEventListener('visibilitychange',()=>{if(!document.hidden)load(Number(document.querySelector('button.on').dataset.d))});setInterval(()=>{if(!document.hidden)load(Number(document.querySelector('button.on').dataset.d))},5000);load();
 </script></main></body></html>`;
 
 export class DCStatsServer {
