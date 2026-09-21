@@ -362,7 +362,14 @@ async function recoverExistingHistory(dir) {
             sessionKey = key;
             const previous = prevMeter.get(key);
             eventId = 'm:' + key + ':' + meter.calls;
-            if ((previous && Number(meter.calls) === Number(previous.calls) + 1) || (!previous && Number(meter.calls) === 1)) {
+            if (meter.callInputTokens != null && meter.callOutputTokens != null) {
+                inputTokens = Number(meter.callInputTokens) || 0;
+                outputTokens = Number(meter.callOutputTokens) || 0;
+                inputBytes = Number(meter.callInputBytes) || inputBytes;
+                outputBytes = Number(meter.callOutputBytes) || outputBytes;
+                quality = 'meter-call';
+                richMeter += 1;
+            } else if ((previous && Number(meter.calls) === Number(previous.calls) + 1) || (!previous && Number(meter.calls) === 1)) {
                 const base = previous || {};
                 inputTokens = deltaMetric(meter, base, 'inputTokens');
                 outputTokens = deltaMetric(meter, base, 'outputTokens');
@@ -400,7 +407,12 @@ async function recoverExistingHistory(dir) {
             status: record.output?.isError ? 'error' : 'ok',
             durationMs: Number(record.duration) || 0,
             inputTokens, outputTokens, inputBytes, outputBytes,
-            taskLabel: null, source: 'history', recoveredQuality: quality
+            agentDeviceId: meter?.agentDeviceId || null,
+            agentInstanceId: meter?.agentInstanceId || null,
+            agentName: meter?.agentName || null,
+            taskLabel: meter?.taskLabel || null,
+            clientName: meter?.clientName || null,
+            source: 'history', recoveredQuality: quality
         });
     }
 
@@ -562,7 +574,9 @@ export class DCStatsServer {
     }
 
     async record(event) {
-        if (process.env.DC_STATS_SERVER !== 'true') return;
+        // Every MCP process records usage. Only start() is gated by
+        // DC_STATS_SERVER, so child stdio MCPs never need to own port 17891.
+        if (process.env.DC_STATS_DISABLE === '1') return;
         if (this.recoveryPromise) await this.recoveryPromise.catch(() => null);
         const row = { ...event, ts: event.ts || Date.now(), source: event.source || 'live' };
         const file = path.join(this.dir, 'traffic-' + localDay(row.ts) + '.jsonl');

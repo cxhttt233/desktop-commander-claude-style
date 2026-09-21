@@ -523,14 +523,15 @@ export class DCAutoSpawnManager {
                 }
             }
 
-            const outputBytes = Buffer.byteLength(JSON.stringify(result?.content ?? result ?? ''), 'utf8');
+            const meter = result?._meta?.dcTokenMeter || {};
             if (!isAgentMeta) {
                 this.writeJson(agent.socket, {
                     type: 'result',
                     callId,
                     ok: true,
                     summary: summarizeToolResult(result),
-                    outputBytes
+                    inputTokens: Number(meter.callInputTokens) || 0,
+                    outputTokens: Number(meter.callOutputTokens) || 0
                 });
             }
 

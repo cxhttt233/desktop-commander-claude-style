@@ -112,6 +112,10 @@ const rich3Ts = new Date(now + 1000).toISOString();
 const meter3 = {
   inputTokens: 9, outputTokens: 11, calls: 1,
   inputBytes: 90, outputBytes: 110,
+  callInputTokens: 9, callOutputTokens: 11,
+  callInputBytes: 90, callOutputBytes: 110,
+  agentDeviceId: 'agent-device-1', agentInstanceId: 'agent-instance-1',
+  agentName: 'test-agent', taskLabel: '恢复任务',
   sessionStarted: now + 500
 };
 await fs.appendFile(path.join(historyDir, 'tool-history.jsonl'), JSON.stringify({
@@ -128,6 +132,8 @@ data = await fetch('http://127.0.0.1:17991/api/summary?days=7').then((r) => r.js
 assert.equal(data.range.calls, 7, 'a later restart must recover the missing call without duplicating old capped history');
 assert.equal(data.recovery.imported, 1, 'second recovery should import only the new call');
 assert.equal(data.recovery.version, 2);
+assert.equal(data.tasks.find((x) => x.name === '恢复任务')?.calls, 1, 'recovery should preserve agent task metadata');
+assert.equal(data.recent.find((x) => x.eventId === 'm:' + meter3.sessionStarted + ':1')?.agentDeviceId, 'agent-device-1');
 
 await dcStats.close();
 dcStats.start();
@@ -135,6 +141,20 @@ await new Promise((resolve) => setTimeout(resolve, 100));
 data = await fetch('http://127.0.0.1:17991/api/summary?days=7').then((r) => r.json());
 assert.equal(data.range.calls, 7, 'repeatable history recovery must remain idempotent');
 assert.equal(data.recovery.imported, 0, 'third recovery should not duplicate rows');
+
+// Recording must not depend on the dashboard HTTP server being enabled.
+await dcStats.close();
+process.env.DC_STATS_SERVER = 'false';
+await dcStats.record({
+  eventId: 'writer-without-server', ts: now + 2000, tool: 'read_file', status: 'ok',
+  durationMs: 30, inputTokens: 3, outputTokens: 4, inputBytes: 12, outputBytes: 16,
+  taskLabel: '无网页服务记录测试'
+});
+process.env.DC_STATS_SERVER = 'true';
+dcStats.start();
+await new Promise((resolve) => setTimeout(resolve, 100));
+data = await fetch('http://127.0.0.1:17991/api/summary?days=7').then((r) => r.json());
+assert.equal(data.range.calls, 8, 'tool usage should still be recorded when the dashboard server flag is absent');
 
 console.log('STATS_TEST_OK', JSON.stringify({
   address: dcStats.server.address().address,

@@ -123,6 +123,7 @@ async function dcRecordTokenTraffic(name, args, result, metadata, startTime) {
     dcAddMetrics('in', input);
     dcAddMetrics('out', output);
     dcProcessTokenMeter.lastActivity = Date.now();
+    const statsMeta = dcStatsMeta(metadata);
     await dcStats.record({
         eventId: 'm:' + dcProcessTokenMeter.sessionStarted + ':' + dcProcessTokenMeter.calls,
         tool: name, status: result?.isError ? 'error' : 'ok', durationMs: Date.now() - startTime,
@@ -133,9 +134,16 @@ async function dcRecordTokenTraffic(name, args, result, metadata, startTime) {
         blobInCount: input.blobCount || 0, blobOutCount: output.blobCount || 0,
         binaryInCount: input.binaryCount || 0, binaryOutCount: output.binaryCount || 0,
         linkInCount: input.linkCount || 0, linkOutCount: output.linkCount || 0,
-        ...dcStatsMeta(metadata)
+        ...statsMeta
     });
-    return { ...dcProcessTokenMeter };
+    return {
+        ...dcProcessTokenMeter,
+        callInputTokens: input.textTokens,
+        callOutputTokens: output.textTokens,
+        callInputBytes: inputBytes,
+        callOutputBytes: outputBytes,
+        ...statsMeta
+    };
 }
 async function dcRecordTokenFailure(name, args, error, metadata, startTime) {
     const input = measureArgs(args);
@@ -174,6 +182,19 @@ old_stats_status = "        tool: name, status: 'ok', durationMs: Date.now() - s
 new_stats_status = "        tool: name, status: result?.isError ? 'error' : 'ok', durationMs: Date.now() - startTime,"
 if old_stats_status in server:
     server = replace_once(server, old_stats_status, new_stats_status, 'stats soft-error status migration')
+
+# Enrich existing installed meters with per-call deltas and agent metadata.
+# The event row is already written above; this return value is what ToolHistory
+# persists and what the visual child receives from the gateway.
+old_meter_return = "    return { ...dcProcessTokenMeter };\n}\nasync function dcRecordTokenFailure"
+new_meter_return = (
+    "    const statsMeta = dcStatsMeta(metadata);\n"
+    "    return { ...dcProcessTokenMeter, callInputTokens: input.textTokens, callOutputTokens: output.textTokens, "
+    "callInputBytes: inputBytes, callOutputBytes: outputBytes, ...statsMeta };\n"
+    "}\nasync function dcRecordTokenFailure"
+)
+if old_meter_return in server:
+    server = replace_once(server, old_meter_return, new_meter_return, 'stats per-call meter migration')
 
 # Record and attach the meter before ToolHistory snapshots/caps the result.
 # This keeps dcTokenMeter inside tool-history even for outputs whose content is

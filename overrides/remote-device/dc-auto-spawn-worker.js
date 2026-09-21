@@ -59,7 +59,9 @@ console.log('   - Remote auth:  parent gateway');
 let stopping = false;
 let socket = null;
 let buffer = '';
-let localOutputBytes = 0;
+let localInputTokens = 0;
+let localOutputTokens = 0;
+let localCalls = 0;
 let taskLabel = '等待任务说明';
 const callNames = new Map();
 
@@ -101,9 +103,15 @@ function handleResult(message) {
     const toolName = callNames.get(message.callId) || 'tool';
     callNames.delete(message.callId);
     if (message.ok) {
-        localOutputBytes += Number(message.outputBytes) || 0;
+        localInputTokens += Number(message.inputTokens) || 0;
+        localOutputTokens += Number(message.outputTokens) || 0;
+        localCalls += 1;
         console.log(`✅ Tool call ${toolName} completed:\r\n ${message.summary || ''}`);
-        dcTerminalStatus.finishCall({ sessionOutputBytes: localOutputBytes });
+        dcTerminalStatus.finishCall({
+            sessionInputTokens: localInputTokens,
+            sessionOutputTokens: localOutputTokens,
+            sessionCalls: localCalls
+        });
     }
     else {
         dcTerminalStatus.finishCall();
