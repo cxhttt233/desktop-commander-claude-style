@@ -100,11 +100,67 @@ async function readEvents(dir, days) {
     return events;
 }
 
-function rank(map, limit = 12) {
+function rank(map, limit = 200) {
     return [...map.entries()]
         .map(([name, value]) => ({ name, ...finishMetric(value) }))
         .sort((a, b) => b.totalTokens - a.totalTokens || b.calls - a.calls)
         .slice(0, limit);
+}
+
+function parseFilters(url) {
+    const clean = (name) => {
+        const value = (url.searchParams.get(name) || '').trim();
+        return value.slice(0, 240);
+    };
+    const dayRaw = clean('day');
+    const hourRaw = url.searchParams.get('hour');
+    const hour = hourRaw == null || hourRaw === '' ? null : Number(hourRaw);
+    return {
+        tool: clean('tool'),
+        task: clean('task'),
+        status: clean('status'),
+        day: /^\d{4}-\d{2}-\d{2}$/.test(dayRaw) ? dayRaw : '',
+        hour: Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null
+    };
+}
+
+function applyFilters(events, filters) {
+    return events.filter((event) => {
+        if (filters.tool && (event.tool || 'unknown') !== filters.tool) return false;
+        if (filters.task && (event.taskLabel || '?????') !== filters.task) return false;
+        if (filters.status && filters.status !== 'all' && (event.status || 'unknown') !== filters.status) return false;
+        if (filters.day && localDay(event.ts) !== filters.day) return false;
+        if (filters.hour != null && new Date(event.ts).getHours() !== filters.hour) return false;
+        return true;
+    });
+}
+
+function dimensionOptions(events) {
+    const tools = new Map();
+    const tasks = new Map();
+    const statuses = new Map();
+    for (const event of events) {
+        const status = event.status || 'unknown';
+        statuses.set(status, (statuses.get(status) || 0) + (event.callsCount == null ? 1 : Math.max(0, Number(event.callsCount) || 0)));
+        if (event.source === 'history-correction') continue;
+        const tool = event.tool || 'unknown';
+        const task = event.taskLabel || '?????';
+        if (!tools.has(tool)) tools.set(tool, metric());
+        if (!tasks.has(task)) tasks.set(task, metric());
+        addMetric(tools.get(tool), event);
+        addMetric(tasks.get(task), event);
+    }
+    return {
+        tools: rank(tools),
+        tasks: rank(tasks),
+        statuses: [...statuses.entries()].map(([name, calls]) => ({ name, calls })).sort((a, b) => b.calls - a.calls)
+    };
+}
+
+function rangeMetric(events) {
+    const value = metric();
+    for (const event of events) addMetric(value, event);
+    return finishMetric(value);
 }
 
 function aggregate(events, days) {
@@ -541,7 +597,16 @@ export class DCStatsServer {
                     const days = parseDays(url);
                     const recovery = this.recoveryPromise ? await this.recoveryPromise : null;
                     const events = await readEvents(this.dir, days);
-                    return json(res, 200, { ...aggregate(events, days), recovery });
+                    const filters = parseFilters(url);
+                    const filteredEvents = applyFilters(events, filters);
+                    return json(res, 200, {
+                        ...aggregate(filteredEvents, days),
+                        scope: rangeMetric(events),
+                        dimensions: dimensionOptions(events),
+                        filters,
+                        matchedEvents: filteredEvents.length,
+                        recovery
+                    });
                 }
                 if (url.pathname === '/' || url.pathname === '/index.html') {
                     const body = await dashboardPage();
