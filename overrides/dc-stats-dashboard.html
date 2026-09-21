@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Desktop Commander · 使用统计</title>
@@ -26,7 +26,7 @@ th:first-child,td:first-child{text-align:left}th{color:#708099;font-size:10px;fo
 <div class="grid"><section class="panel"><h2>工具排行</h2><div id="tools"></div></section>
 <section class="panel"><h2>任务 / 子 Agent</h2><div id="tasks"></div></section></div>
 <section class="panel"><h2>最近调用</h2><div style="overflow:auto"><table><thead><tr>
-<th>时间</th><th>任务</th><th>工具</th><th>状态</th><th>输入 Token</th><th>输出 Token</th><th>耗时</th>
+<th>时间</th><th>任务</th><th>工具</th><th>状态</th><th>模型输入 Token</th><th>模型输出 Token</th><th>耗时</th>
 </tr></thead><tbody id="recent"></tbody></table></div></section>
 <script>
 const f=n=>{n=Number(n)||0;if(n<1e3)return String(Math.round(n));if(n<1e6)return (n/1e3).toFixed(n<1e4?1:0)+'K';return (n/1e6).toFixed(n<1e7?2:1)+'M'};
@@ -37,11 +37,11 @@ function dailyChart(rows){const c=document.getElementById('daily'),r=devicePixel
 function hourlyChart(rows){const c=document.getElementById('hourly'),r=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*r;c.height=h*r;const x=c.getContext('2d');x.setTransform(r,0,0,r,0,0);x.clearRect(0,0,w,h);const max=Math.max(1,...rows.map(v=>v.calls)),gap=5,bw=Math.max(4,(w-32)/rows.length-gap);rows.forEach((v,i)=>{const bh=Math.max(3,(h-38)*v.calls/max),px=16+i*(bw+gap),gr=x.createLinearGradient(0,h-28-bh,0,h-28);gr.addColorStop(0,'rgba(104,185,255,.95)');gr.addColorStop(1,'rgba(104,185,255,.22)');x.fillStyle=gr;x.fillRect(px,h-28-bh,bw,bh);x.fillStyle='#64748b';x.font='9px system-ui';x.textAlign='center';x.fillText(String(v.hour).padStart(2,'0'),px+bw/2,h-9)})}
 
 async function load(days=30){const d=await fetch('/api/summary?days='+days,{cache:'no-store'}).then(r=>r.json());
-const failRate=d.range.calls?(d.range.failures/d.range.calls*100):0;const cards=[['区间 Tokens',f(d.range.totalTokens),(days===1?'今日':days+' 天')+' · 日均 '+f(Math.round(d.range.totalTokens/Math.max(1,d.byDay.filter(x=>x.calls>0).length)))],['今日 Tokens',f(d.today.totalTokens),'实时累计'],['调用次数',f(d.range.calls),'失败 '+f(d.range.failures)+' 次 · '+failRate.toFixed(2)+'%'],['输入 / 输出',f(d.range.inputTokens)+' / '+f(d.range.outputTokens),'工具载荷结构'],['载荷流量',fb(d.range.totalBytes),'输入 '+fb(d.range.inputBytes)+' · 输出 '+fb(d.range.outputBytes)],['平均耗时',f(d.range.avgDurationMs)+' ms','累计 '+f(d.range.durationMs)+' ms']];
+const failRate=d.range.calls?(d.range.failures/d.range.calls*100):0;const cards=[['总 Tokens',f(d.range.totalTokens),(days===1?'今日':'近'+days+'天')+' · 日均 '+f(Math.round(d.range.totalTokens/Math.max(1,d.byDay.filter(x=>x.calls>0).length)))],['今日 Tokens',f(d.today.totalTokens),'实时累计'],['调用次数',f(d.range.calls),'失败 '+f(d.range.failures)+' 次 · '+failRate.toFixed(2)+'%'],['模型输入 / 模型输出',f(d.range.outputTokens)+' / '+f(d.range.inputTokens),'工具结果 / 工具参数'],['载荷流量',fb(d.range.totalBytes),'模型输入 '+fb(d.range.outputBytes)+' · 模型输出 '+fb(d.range.inputBytes)],['平均耗时',f(d.range.avgDurationMs)+' ms','累计 '+f(d.range.durationMs)+' ms']];
 document.getElementById('cards').innerHTML=cards.map(x=>'<div class="card"><div class="k">'+x[0]+'</div><div class="v">'+x[1]+'</div><div class="meta">'+x[2]+'</div></div>').join('');
 dailyChart(d.byDay);hourlyChart(d.byHour);
 document.getElementById('tools').innerHTML=table(d.tools);document.getElementById('tasks').innerHTML=table(d.tasks);
-document.getElementById('recent').innerHTML=d.recent.map(x=>'<tr><td>'+new Date(x.ts).toLocaleString()+'</td><td>'+esc(x.taskLabel||'未标注')+'</td><td>'+esc(x.tool)+'</td><td class="'+(x.status==='error'?'bad':'ok')+'">'+esc(x.status)+'</td><td>'+f(x.inputTokens)+'</td><td>'+f(x.outputTokens)+'</td><td>'+f(x.durationMs)+' ms</td></tr>').join('');
+document.getElementById('recent').innerHTML=d.recent.map(x=>'<tr><td>'+new Date(x.ts).toLocaleString()+'</td><td>'+esc(x.taskLabel||'未标注')+'</td><td>'+esc(x.tool)+'</td><td class="'+(x.status==='error'?'bad':'ok')+'">'+esc(x.status)+'</td><td>'+f(x.outputTokens)+'</td><td>'+f(x.inputTokens)+'</td><td>'+f(x.durationMs)+' ms</td></tr>').join('');
 }
 document.querySelectorAll('button[data-d]').forEach(b=>b.onclick=()=>{document.querySelectorAll('button[data-d]').forEach(x=>x.classList.remove('on'));b.classList.add('on');load(Number(b.dataset.d))});
 addEventListener('resize',()=>{clearTimeout(window.__rt);window.__rt=setTimeout(()=>load(Number(document.querySelector('button.on').dataset.d)),100)});document.addEventListener('visibilitychange',()=>{if(!document.hidden)load(Number(document.querySelector('button.on').dataset.d))});setInterval(()=>{if(!document.hidden)load(Number(document.querySelector('button.on').dataset.d))},5000);let uiVersion=null;async function checkUi(){try{const v=(await fetch('/api/ui-version',{cache:'no-store'}).then(r=>r.json())).version;if(uiVersion===null)uiVersion=v;else if(v&&v!==uiVersion)location.reload()}catch{}}setInterval(checkUi,2000);checkUi();load();
