@@ -21,6 +21,8 @@ try {
 if ($proxyUp) {
     $env:HTTP_PROXY = 'http://127.0.0.1:7890'
     $env:HTTPS_PROXY = 'http://127.0.0.1:7890'
+    $env:NO_PROXY = 'localhost,127.0.0.1'
+    $env:NODE_USE_ENV_PROXY = '1'
 }
 
 $verbCache = Join-Path $dcRoot 'claude-spinner-verbs.json'
