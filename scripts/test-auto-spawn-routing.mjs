@@ -87,6 +87,50 @@ for (const agent of [a, b]) {
   assert.equal(agent.activeCalls.size, 0);
 }
 
+// A fresh child must register a meaningful task before normal tools can run.
+const c = makeAgent('dev-c', 'c1');
+c.taskLabel = null;
+const startsBeforeGate = starts.length;
+await manager.handlePendingRow(c, {
+  id: 'call-c-blocked', device_id: 'dev-c', tool_name: 'read_file',
+  tool_args: { path: 'C:/tmp/example.txt' }, metadata: {}
+});
+assert.equal(starts.length, startsBeforeGate, 'unnamed child must not execute normal tools');
+assert.equal(c.messages[0].type, 'result');
+assert.equal(c.messages[0].ok, false);
+assert.match(c.messages[0].error, /DC_TASK_LABEL_REQUIRED/);
+assert.equal(updates.at(-1).result?.isError, true);
+
+// Avoid filesystem/database writes in this unit test while exercising the handshake.
+manager.setAgentTask = async (agent, label) => { agent.taskLabel = label; };
+await manager.handlePendingRow(c, {
+  id: 'call-c-generic', device_id: 'dev-c', tool_name: 'start_process',
+  tool_args: { command: '# DC_AGENT_META\nTASK=测试' }, metadata: {}
+});
+assert.equal(c.taskLabel, null, 'generic task label must be rejected');
+assert.equal(updates.at(-1).status, 'failed');
+
+await manager.handlePendingRow(c, {
+  id: 'call-c-meta', device_id: 'dev-c', tool_name: 'start_process',
+  tool_args: { command: '# DC_AGENT_META\nTASK=排查Hop中文间距' }, metadata: {}
+});
+assert.equal(c.taskLabel, '排查Hop中文间距');
+assert.equal(updates.at(-1).status, 'completed');
+
+await manager.handlePendingRow(c, {
+  id: 'call-c-after-meta', device_id: 'dev-c', tool_name: 'read_file',
+  tool_args: { path: 'C:/tmp/example.txt' }, metadata: {}
+});
+assert.equal(starts.at(-1).metadata.dcAgentTaskLabel, '排查Hop中文间距');
+
+await manager.handlePendingRow(c, {
+  id: 'call-c-rename', device_id: 'dev-c', tool_name: 'start_process',
+  tool_args: { command: '# DC_AGENT_META\nTASK=另一个任务' }, metadata: {}
+});
+assert.equal(c.taskLabel, '排查Hop中文间距', 'registered task label must stay locked');
+assert.equal(updates.at(-1).status, 'failed');
+assert.match(updates.at(-1).errorMessage, /task is locked/);
+
 console.log('R17_ROUTING_OK');
 console.log(`parallel_start_delta_ms=${Math.abs(starts[0].at - starts[1].at)}`);
 console.log(`elapsed_ms=${elapsed}`);

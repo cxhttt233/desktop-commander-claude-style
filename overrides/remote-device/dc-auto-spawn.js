@@ -16,6 +16,28 @@ const HEARTBEAT_INTERVAL_MS = 15 * 1000;
 const REDIRECT_COALESCE_MS = 1000;
 const SCOPED_REDIRECT_REUSE_MS = 30 * 1000;
 const MANAGED_CAPABILITY = 'dc_auto_spawn_v1';
+const TASK_LABEL_MIN_CHARS = 2;
+const TASK_LABEL_MAX_CHARS = 30;
+const GENERIC_TASK_LABELS = new Set([
+    '任务', '子任务', '继续', '继续修改', '修改', '测试', '调试',
+    'task', 'test', 'fix', 'debug', 'continue'
+]);
+
+function normalizeTaskLabel(value) {
+    return Array.from(String(value || '').replace(/\s+/g, ' ').trim())
+        .slice(0, TASK_LABEL_MAX_CHARS)
+        .join('');
+}
+
+function validateTaskLabel(value) {
+    const label = normalizeTaskLabel(value);
+    const length = Array.from(label).length;
+    if (length < TASK_LABEL_MIN_CHARS)
+        return { ok: false, label, reason: `task label must be at least ${TASK_LABEL_MIN_CHARS} characters` };
+    if (GENERIC_TASK_LABELS.has(label.toLowerCase()))
+        return { ok: false, label, reason: 'task label is too generic; describe the actual work' };
+    return { ok: true, label };
+}
 
 function safeId(value) {
     return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
@@ -204,9 +226,9 @@ export class DCAutoSpawnManager {
                         `deviceName: ${agent.deviceName}`,
                         `gatewayDeviceId: ${this.parentDeviceId}`,
                         '',
-                        'REGISTER_TASK',
+                        'MUST_REGISTER_TASK_BEFORE_TOOLS',
                         '# DC_AGENT_META',
-                        'TASK=<6-20字中文任务>',
+                        'TASK=<2-30字明确任务名>',
                         '',
                         'RECOVERY',
                         'Keep this deviceId for this conversation. If it is lost/stale or a DC call says "device not found", call list_devices before saying DC is unavailable. Recover only the child whose dc_auto_spawn_v1.task_label matches this conversation; if none exists, allocate a new child from gatewayDeviceId.'
@@ -228,7 +250,8 @@ export class DCAutoSpawnManager {
             [MANAGED_CAPABILITY]: {
                 parent_device_id: this.parentDeviceId,
                 instance_id: agent.instanceId,
-                ttl_ms: this.ttlMs
+                ttl_ms: this.ttlMs,
+                task_label: null
             }
         };
         const { data, error } = await client
@@ -412,12 +435,10 @@ export class DCAutoSpawnManager {
         const taskLine = lines.find((line) => line.startsWith('TASK='));
         if (!taskLine)
             return '';
-        const task = taskLine.slice(5).replace(/\s+/g, ' ').trim();
-        return Array.from(task).slice(0, 40).join('');
+        return normalizeTaskLabel(taskLine.slice(5));
     }
 
     async setAgentTask(agent, taskLabel) {
-        agent.taskLabel = taskLabel;
         const profilePath = path.join(agent.profileDir, 'instance.json');
         let profile = {};
         try {
@@ -447,6 +468,7 @@ export class DCAutoSpawnManager {
         if (error)
             throw new Error(`Could not persist auto-spawn task label: ${error.message}`);
 
+        agent.taskLabel = taskLabel;
         this.writeJson(agent.socket, { type: 'meta', taskLabel });
     }
 
@@ -478,16 +500,37 @@ export class DCAutoSpawnManager {
 
             let result;
             if (isAgentMeta) {
-                if (!taskLabel)
-                    throw new Error('DC_AGENT_META requires TASK=<task label>');
-                await this.setAgentTask(agent, taskLabel);
+                const validation = validateTaskLabel(taskLabel);
+                if (!validation.ok)
+                    throw new Error(`DC_AGENT_META invalid TASK: ${validation.reason}`);
+                const normalizedTask = validation.label;
+                if (agent.taskLabel && agent.taskLabel !== normalizedTask) {
+                    throw new Error(`DC_AGENT_META task is locked as "${agent.taskLabel}"; create a new child Agent for a different task`);
+                }
+                if (!agent.taskLabel)
+                    await this.setAgentTask(agent, normalizedTask);
                 result = {
                     content: [{
                         type: 'text',
                         text: [
                             'DC_AGENT_META_OK',
-                            `TASK=${taskLabel}`,
-                            `RECOVERY: If this device is lost/stale, call list_devices and find dc_auto_spawn_v1.task_label="${taskLabel}" before saying DC is unavailable; if no match, allocate a new child from gatewayDeviceId=${this.parentDeviceId}.`
+                            `TASK=${normalizedTask}`,
+                            `RECOVERY: If this device is lost/stale, call list_devices and find dc_auto_spawn_v1.task_label="${normalizedTask}" before saying DC is unavailable; if no match, allocate a new child from gatewayDeviceId=${this.parentDeviceId}.`
+                        ].join('\n')
+                    }]
+                };
+            }
+            else if (!agent.taskLabel && row.tool_name !== 'ping' && row.tool_name !== 'shutdown') {
+                result = {
+                    isError: true,
+                    content: [{
+                        type: 'text',
+                        text: [
+                            'DC_TASK_LABEL_REQUIRED',
+                            'This child Agent has no task name. Register the task before using any normal DC tool.',
+                            '# DC_AGENT_META',
+                            'TASK=<2-30字明确任务名>',
+                            'After DC_AGENT_META_OK, retry the blocked tool call.'
                         ].join('\n')
                     }]
                 };
@@ -528,8 +571,9 @@ export class DCAutoSpawnManager {
                 this.writeJson(agent.socket, {
                     type: 'result',
                     callId,
-                    ok: true,
+                    ok: !result?.isError,
                     summary: summarizeToolResult(result),
+                    error: result?.isError ? summarizeToolResult(result) : undefined,
                     inputTokens: Number(meter.callInputTokens) || 0,
                     outputTokens: Number(meter.callOutputTokens) || 0
                 });
