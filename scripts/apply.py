@@ -17,10 +17,8 @@ if pkg.get('version') != '0.2.50':
 
 server_path = root / 'dist/server.js'
 device_path = root / 'dist/remote-device/device.js'
-authenticator_path = root / 'dist/remote-device/device-authenticator.js'
 server = server_path.read_text(encoding='utf-8')
 device = device_path.read_text(encoding='utf-8')
-authenticator = authenticator_path.read_text(encoding='utf-8')
 
 marker = '// dc-token-odometer-v0.2.50-fixed-r9-multimodal'
 if marker not in server:
@@ -298,23 +296,6 @@ new_allocate_redirect = "                const redirect = await this.autoSpawn.a
 if old_allocate_redirect in device:
     device = replace_once(device, old_allocate_redirect, new_allocate_redirect, 'auto-spawn metadata migration')
 
-auth_marker = '// dc-auth-browser-chrome-v1'
-if auth_marker not in authenticator:
-    authenticator = replace_once(
-        authenticator,
-        "import open from 'open';\n",
-        "import open, { apps } from 'open';\n",
-        'auth browser import'
-    )
-    authenticator = replace_once(
-        authenticator,
-        "        open(deviceAuth.verification_uri_complete).catch(() => {\n",
-        "        " + auth_marker + "\n"
-        "        open(deviceAuth.verification_uri_complete, { app: { name: apps.chrome } }).catch(() => {\n",
-        'auth browser chrome'
-    )
-
 server_path.write_text(server, encoding='utf-8', newline='\n')
 device_path.write_text(device, encoding='utf-8', newline='\n')
-authenticator_path.write_text(authenticator, encoding='utf-8', newline='\n')
 print('ANCHOR_PATCH_OK')
