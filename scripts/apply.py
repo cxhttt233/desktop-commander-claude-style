@@ -296,6 +296,170 @@ new_allocate_redirect = "                const redirect = await this.autoSpawn.a
 if old_allocate_redirect in device:
     device = replace_once(device, old_allocate_redirect, new_allocate_redirect, 'auto-spawn metadata migration')
 
+
+# dc-tool-prompt-efficiency-v1
+if "When several known files are needed, use read_multiple_files instead of repeated read_file calls." not in server:
+    server = replace_once(
+        server,
+        "                        Prefer this over 'execute_command' with cat/type for viewing files.\n",
+        "                        Prefer this over 'execute_command' with cat/type for viewing files.\n"
+        "                        When several known files are needed, use read_multiple_files instead of repeated read_file calls.\n",
+        'read_file batching guidance'
+    )
+
+if "Write small or medium files in one call when practical." not in server:
+    old = '''                        CHUNKING IS STANDARD PRACTICE: Always write files in chunks of 25-30 lines maximum.
+                        This is the normal, recommended way to write files - not an emergency measure.
+
+                        STANDARD PROCESS FOR ANY FILE:
+                        1. FIRST → write_file(filePath, firstChunk, {mode: 'rewrite'})  [≤30 lines]
+                        2. THEN → write_file(filePath, secondChunk, {mode: 'append'})   [≤30 lines]
+                        3. CONTINUE → write_file(filePath, nextChunk, {mode: 'append'}) [≤30 lines]
+
+                        ALWAYS CHUNK PROACTIVELY - don't wait for performance warnings!
+
+                        WHEN TO CHUNK (always be proactive):
+                        1. Any file expected to be longer than 25-30 lines
+                        2. When writing multiple files in sequence
+                        3. When creating documentation, code files, or configuration files
+
+                        HANDLING CONTINUATION ("Continue" prompts):
+                        If user asks to "Continue" after an incomplete operation:
+                        1. Read the file to see what was successfully written
+                        2. Continue writing ONLY the remaining content using {mode: 'append'}
+                        3. Keep chunks to 25-30 lines each
+
+'''
+    new = '''                        Write small or medium files in one call when practical. For large files, performance warnings, or incomplete writes, use coherent chunks and append only the remaining content.
+
+'''
+    server = replace_once(server, old, new, 'write_file chunking guidance')
+
+if "Use the smallest uniquely identifiable block that completes one coherent edit." not in server:
+    old = '''                        BEST PRACTICE: Make multiple small, focused edits rather than one large edit.
+                        Each edit_block call should change only what needs to be changed - include just enough
+                        context to uniquely identify the text being modified.
+'''
+    new = '''                        Use the smallest uniquely identifiable block that completes one coherent edit. For the same replacement in multiple places, use expected_replacements instead of repeated calls; keep unrelated changes separate.
+'''
+    server = replace_once(server, old, new, 'edit_block guidance')
+    old = '''                        When editing multiple sections, make separate edit_block calls for each distinct change
+                        rather than one large replacement.
+
+'''
+    server = replace_once(server, old, '', 'edit_block repeated guidance')
+
+if "For short, related, non-destructive shell commands already known" not in server:
+    old = '''                        ${OS_GUIDANCE}
+                        
+                        REQUIRED WORKFLOW FOR LOCAL FILES:'''
+    new = '''                        ${OS_GUIDANCE}
+
+                        For short, related, non-destructive shell commands already known, prefer one start_process call with appropriate shell separators; keep dependent, destructive, long-running, or unrelated operations separate.
+                        
+                        REQUIRED WORKFLOW FOR LOCAL FILES:'''
+    server = replace_once(server, old, new, 'start_process batching guidance')
+
+if 'If uncertain, try the most likely type first and broaden only if results are insufficient.' not in server:
+    old = '''                        SEARCH STRATEGY GUIDE:
+                        Choose the right search type based on what the user is looking for:
+                        
+                        USE searchType="files" WHEN:
+                        - User asks for specific files: "find package.json", "locate config files"
+                        - Pattern looks like a filename: "*.js", "README.md", "test-*.tsx" 
+                        - User wants to find files by name/extension: "all TypeScript files", "Python scripts"
+                        - Looking for configuration/setup files: ".env", "dockerfile", "tsconfig.json"
+                        
+                        USE searchType="content" WHEN:
+                        - User asks about code/logic: "authentication logic", "error handling", "API calls"
+                        - Looking for functions/variables: "getUserData function", "useState hook"
+                        - Searching for text/comments: "TODO items", "FIXME comments", "documentation"
+                        - Finding patterns in code: "console.log statements", "import statements"
+                        - User describes functionality: "components that handle login", "files with database queries"
+                        
+                        WHEN UNSURE OR USER REQUEST IS AMBIGUOUS:
+                        Run TWO searches in parallel - one for files and one for content:
+                        
+                        Example approach for ambiguous queries like "find authentication stuff":
+                        1. Start file search: searchType="files", pattern="auth"
+                        2. Simultaneously start content search: searchType="content", pattern="authentication"  
+                        3. Present combined results: "Found 3 auth-related files and 8 files containing authentication code"
+                        
+'''
+    new = '''                        Use searchType="files" for names/extensions/paths and "content" for text, code, or symbols. If uncertain, try the most likely type first and broaden only if results are insufficient.
+                        
+'''
+    server = replace_once(server, old, new, 'start_search strategy guidance')
+
+    old = '''                        PATTERN MATCHING MODES:
+                        - Default (literalSearch=false): Patterns are treated as regular expressions
+                        - Literal (literalSearch=true): Patterns are treated as exact strings
+                        
+                        WHEN TO USE literalSearch=true:
+                        Use literal search when searching for code patterns with special characters:
+                        - Function calls with parentheses and quotes
+                        - Array access with brackets
+                        - Object methods with dots and parentheses
+                        - File paths with backslashes
+                        - Any pattern containing: . * + ? ^ $ { } [ ] | \\ ( )
+                        
+                        IMPORTANT PARAMETERS:
+                        - pattern: What to search for (file names OR content text)
+                        - literalSearch: Use exact string matching instead of regex (default: false)
+                        - filePattern: Optional filter to limit search to specific file types (e.g., "*.js", "package.json")
+                        - ignoreCase: Case-insensitive search (default: true). Works for both file names and content.
+                        - earlyTermination: Stop search early when exact filename match is found (optional: defaults to true for file searches, false for content searches)
+                        
+'''
+    new = '''                        Use literalSearch=true for exact text/code/path; otherwise patterns are regex. Use filePattern to narrow scope when known.
+                        
+'''
+    server = replace_once(server, old, new, 'start_search pattern guidance')
+
+    old = '''                        DECISION EXAMPLES:
+                        - "find package.json" → searchType="files", pattern="package.json" (specific file)
+                        - "find authentication components" → searchType="content", pattern="authentication" (looking for functionality)
+                        - "locate all React components" → searchType="files", pattern="*.tsx" or "*.jsx" (file pattern)
+                        - "find TODO comments" → searchType="content", pattern="TODO" (text in files)
+                        - "show me login files" → AMBIGUOUS → run both: files with "login" AND content with "login"
+                        - "find config" → AMBIGUOUS → run both: config files AND files containing config code
+                        
+                        COMPREHENSIVE SEARCH EXAMPLES:
+                        - Find package.json files: searchType="files", pattern="package.json"
+                        - Find all JS files: searchType="files", pattern="*.js"
+                        - Search for TODO in code: searchType="content", pattern="TODO", filePattern="*.js|*.ts"
+                        - Search for exact code: searchType="content", pattern="toast.error('test')", literalSearch=true
+                        - Ambiguous request "find auth stuff": Run two searches:
+                          1. searchType="files", pattern="auth"
+                          2. searchType="content", pattern="authentication"
+                        
+                        PRO TIP: When user requests are ambiguous about whether they want files or content,
+                        run both searches concurrently and combine results for comprehensive coverage.
+                        
+'''
+    server = replace_once(server, old, '', 'start_search example guidance')
+
+    old = '''                        Unlike regular search tools, this starts a background search process and returns
+                        immediately with a session ID. Use get_more_search_results to get results as they
+                        come in, and stop_search to stop the search early if needed.
+                        
+                        Perfect for large directories where you want to see results immediately and
+                        have the option to cancel if the search takes too long or you find what you need.
+'''
+    new = '''                        This starts a background search and returns a session ID; use get_more_search_results for results and stop_search once enough information is found.
+'''
+    server = replace_once(server, old, new, 'start_search lifecycle guidance')
+
+if "do not poll solely for completion when the initial output already answers the task" not in server:
+    server = replace_once(
+        server,
+        "                        Read output from a running process with file-like pagination support.\n",
+        "                        Read output from a running process with file-like pagination support.\n"
+        "                        Use this only when more output or completion status is needed; do not poll solely for completion when the initial output already answers the task unless completion itself matters.\n",
+        'read_process_output polling guidance'
+    )
+
+
 server_path.write_text(server, encoding='utf-8', newline='\n')
 device_path.write_text(device, encoding='utf-8', newline='\n')
 print('ANCHOR_PATCH_OK')
