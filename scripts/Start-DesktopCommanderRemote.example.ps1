@@ -34,6 +34,12 @@ if (-not $refresh -and (Test-Path $claudeExe)) {
 }
 if ($refresh -and (Test-Path $extractor)) { python $extractor *> $null }
 
+# Restrict normal DC file/process work to the code workspace.
+# Set DC_WORKSPACE_DISABLE=1 before launch only for explicit maintenance.
+if ($env:DC_WORKSPACE_DISABLE -ne '1') {
+    $env:DC_WORKSPACE_ROOT = 'C:\Code'
+}
+
 # Optional gateway mode: allocate one temporary DC device/window per AI conversation.
 $env:DC_AUTO_SPAWN = 'true'
 $env:DC_STATS_SERVER = 'true'

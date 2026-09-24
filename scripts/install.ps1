@@ -6,7 +6,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $backupRoot = Join-Path $PackageRoot ('dc-custom-backup-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $backupRoot | Out-Null
 
-foreach ($rel in @('dist\server.js','dist\remote-device\device.js')) {
+foreach ($rel in @('dist\server.js','dist\remote-device\device.js','dist\config-manager.js','dist\terminal-manager.js')) {
     $src = Join-Path $PackageRoot $rel
     $dst = Join-Path $backupRoot $rel
     New-Item -ItemType Directory -Path (Split-Path $dst -Parent) -Force | Out-Null
@@ -24,6 +24,8 @@ Copy-Item (Join-Path $repoRoot 'overrides\remote-device\dc-auto-spawn-worker.js'
 
 $node = 'C:\Program Files\nodejs\node.exe'
 & $node --check (Join-Path $PackageRoot 'dist\server.js')
+& $node --check (Join-Path $PackageRoot 'dist\config-manager.js')
+& $node --check (Join-Path $PackageRoot 'dist\terminal-manager.js')
 & $node --check (Join-Path $PackageRoot 'dist\dc-stats-server.js')
 & $node --check (Join-Path $PackageRoot 'dist\remote-device\device.js')
 & $node --check (Join-Path $PackageRoot 'dist\remote-device\dc-terminal-status.js')

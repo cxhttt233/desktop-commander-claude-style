@@ -17,8 +17,12 @@ if pkg.get('version') != '0.2.50':
 
 server_path = root / 'dist/server.js'
 device_path = root / 'dist/remote-device/device.js'
+config_manager_path = root / 'dist/config-manager.js'
+terminal_manager_path = root / 'dist/terminal-manager.js'
 server = server_path.read_text(encoding='utf-8')
 device = device_path.read_text(encoding='utf-8')
+config_manager = config_manager_path.read_text(encoding='utf-8')
+terminal_manager = terminal_manager_path.read_text(encoding='utf-8')
 
 marker = '// dc-token-odometer-v0.2.50-fixed-r9-multimodal'
 if marker not in server:
@@ -460,6 +464,109 @@ if "do not poll solely for completion when the initial output already answers th
     )
 
 
+workspace_marker = '// dc-workspace-root-v1'
+if workspace_marker not in config_manager:
+    config_manager = replace_once(
+        config_manager,
+        "import { CONFIG_FILE } from './config.js';\n",
+        "import { CONFIG_FILE } from './config.js';\n"
+        "// dc-workspace-root-v1\n"
+        "function dcWorkspaceAllowedDirectories() {\n"
+        "    if (process.env.DC_WORKSPACE_DISABLE === '1') return null;\n"
+        "    const root = (process.env.DC_WORKSPACE_ROOT || '').trim();\n"
+        "    return root ? [path.resolve(root)] : null;\n"
+        "}\n",
+        'workspace config helper'
+    )
+    config_manager = replace_once(
+        config_manager,
+        "    async getConfig() {\n        await this.init();\n        return { ...this.config };\n    }\n",
+        "    async getConfig() {\n"
+        "        await this.init();\n"
+        "        const workspaceDirs = dcWorkspaceAllowedDirectories();\n"
+        "        return { ...this.config, ...(workspaceDirs ? { allowedDirectories: workspaceDirs } : {}) };\n"
+        "    }\n",
+        'workspace getConfig'
+    )
+    config_manager = replace_once(
+        config_manager,
+        "    async getValue(key) {\n        await this.init();\n        return this.config[key];\n    }\n",
+        "    async getValue(key) {\n"
+        "        await this.init();\n"
+        "        const workspaceDirs = dcWorkspaceAllowedDirectories();\n"
+        "        if (key === 'allowedDirectories' && workspaceDirs) return workspaceDirs;\n"
+        "        return this.config[key];\n"
+        "    }\n",
+        'workspace getValue'
+    )
+    config_manager = replace_once(
+        config_manager,
+        "    async setValue(key, value) {\n        await this.init();\n",
+        "    async setValue(key, value) {\n"
+        "        await this.init();\n"
+        "        const workspaceDirs = dcWorkspaceAllowedDirectories();\n"
+        "        if (key === 'allowedDirectories' && workspaceDirs) value = workspaceDirs;\n",
+        'workspace setValue'
+    )
+
+if workspace_marker not in server:
+    old = "const PATH_GUIDANCE = `IMPORTANT: ${getPathGuidance(SYSTEM_INFO)} Relative paths may fail as they depend on the current working directory. Tilde paths (~/...) might not work in all contexts. Unless the user explicitly asks for relative paths, use absolute paths.`;\n"
+    new = r'''// dc-workspace-root-v1
+const DC_WORKSPACE_ROOT = process.env.DC_WORKSPACE_DISABLE === '1' ? '' : (process.env.DC_WORKSPACE_ROOT || '').trim();
+const DC_WORKSPACE_PATH = DC_WORKSPACE_ROOT ? path.resolve(DC_WORKSPACE_ROOT) : '';
+function dcWorkspaceTextViolation(value) {
+    if (!DC_WORKSPACE_PATH || typeof value !== 'string' || !value.trim()) return null;
+    const text = value;
+    if (/(^|[\s"'`=])\.\.[\\/]/.test(text)) return 'parent-directory traversal (..) is not allowed';
+    if (/(%USERPROFILE%|%APPDATA%|%LOCALAPPDATA%|%TEMP%|%TMP%|\$env:(USERPROFILE|APPDATA|LOCALAPPDATA|TEMP|TMP|HOME)|\$HOME|~[\\/])/i.test(text)) return 'home/profile path expansion is not allowed';
+    if (/(^|[\s"'`=])\\\\[^\\\s]+\\[^\\\s]+/.test(text)) return 'UNC paths are outside the workspace';
+    if (/(^|[\s"'`=])\\(?!\\)[A-Za-z0-9_.-]/.test(text)) return 'drive-root-relative paths are outside the workspace';
+    const matches = text.match(/[A-Za-z]:[\\/][^\s"'`;&|<>]*/g) || [];
+    for (const raw of matches) {
+        const candidate = path.resolve(raw);
+        const rel = path.relative(DC_WORKSPACE_PATH, candidate);
+        if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) continue;
+        return `path outside workspace: ${raw}`;
+    }
+    return null;
+}
+function dcWorkspaceToolViolation(name, args) {
+    if (!DC_WORKSPACE_PATH || !args || typeof args !== 'object') return null;
+    if (name === 'start_process') {
+        const command = String(args.command || '');
+        if (command.trim() === 'node:local') return 'node:local is disabled in workspace mode';
+        return dcWorkspaceTextViolation(command);
+    }
+    if (name === 'interact_with_process') return dcWorkspaceTextViolation(String(args.input || ''));
+    return null;
+}
+const PATH_GUIDANCE = `IMPORTANT: ${getPathGuidance(SYSTEM_INFO)} Relative paths may fail as they depend on the current working directory. Tilde paths (~/...) might not work in all contexts. Unless the user explicitly asks for relative paths, use absolute paths.${DC_WORKSPACE_PATH ? ` WORKSPACE RESTRICTION: access files only inside ${DC_WORKSPACE_PATH}; do not use parent traversal, home/profile paths, UNC paths, or absolute paths outside this root.` : ''}`;
+'''
+    server = replace_once(server, old, new, 'workspace server helper')
+    server = replace_once(
+        server,
+        "        // Track tool call\n        trackToolCall(name, args);\n",
+        "        const dcWorkspaceViolation = dcWorkspaceToolViolation(name, args);\n"
+        "        if (dcWorkspaceViolation) throw new Error(`Workspace restriction (${DC_WORKSPACE_PATH}): ${dcWorkspaceViolation}`);\n"
+        "        // Track tool call\n"
+        "        trackToolCall(name, args);\n",
+        'workspace call guard'
+    )
+
+if workspace_marker not in terminal_manager:
+    terminal_manager = replace_once(
+        terminal_manager,
+        "        // Spawn the process with appropriate arguments\n        const childProcess = spawn(spawnConfig.executable, spawnConfig.args, spawnOptions);\n",
+        "        // dc-workspace-root-v1\n"
+        "        const dcWorkspaceCwd = process.env.DC_WORKSPACE_DISABLE === '1' ? '' : (process.env.DC_WORKSPACE_ROOT || '').trim();\n"
+        "        if (dcWorkspaceCwd) spawnOptions.cwd = dcWorkspaceCwd;\n"
+        "        // Spawn the process with appropriate arguments\n"
+        "        const childProcess = spawn(spawnConfig.executable, spawnConfig.args, spawnOptions);\n",
+        'workspace terminal cwd'
+    )
+
 server_path.write_text(server, encoding='utf-8', newline='\n')
 device_path.write_text(device, encoding='utf-8', newline='\n')
+config_manager_path.write_text(config_manager, encoding='utf-8', newline='\n')
+terminal_manager_path.write_text(terminal_manager, encoding='utf-8', newline='\n')
 print('ANCHOR_PATCH_OK')
