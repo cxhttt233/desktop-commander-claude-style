@@ -100,6 +100,51 @@ async function readEvents(dir, days) {
     return events;
 }
 
+
+function historyRoot() {
+    return process.env.DC_HISTORY_DIR || path.join(os.homedir(), '.claude-server-commander');
+}
+
+function callHistoryEventId(call) {
+    const meter = call?.output?._meta?.dcTokenMeter;
+    if (meter?.sessionStarted == null || meter?.calls == null) return null;
+    return 'm:' + meter.sessionStarted + ':' + meter.calls;
+}
+
+async function readRecentToolHistory(maxResults = 1000) {
+    const file = path.join(historyRoot(), 'tool-history.jsonl');
+    let text = '';
+    try { text = await fs.readFile(file, 'utf8'); } catch { return []; }
+    const lines = text.split(/\r?\n/);
+    const records = [];
+    for (let i = lines.length - 1; i >= 0 && records.length < maxResults; i--) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        try { records.push(JSON.parse(line)); } catch {}
+    }
+    return records;
+}
+
+async function findCallDetail(ts, tool, eventId) {
+    const calls = await readRecentToolHistory(1000);
+    const candidates = tool ? calls.filter((call) => call?.toolName === tool) : calls;
+    if (eventId) {
+        const exact = candidates.find((call) => callHistoryEventId(call) === eventId);
+        if (exact) {
+            const delta = ts > 0 ? Math.abs(Date.parse(exact.timestamp) - ts) : 0;
+            return { call: exact, matchedDeltaMs: Number.isFinite(delta) ? delta : 0, matchedBy: 'eventId' };
+        }
+    }
+    let best = null;
+    let bestDelta = Infinity;
+    for (const call of candidates) {
+        const delta = Math.abs(Date.parse(call.timestamp) - ts);
+        if (delta < bestDelta) { best = call; bestDelta = delta; }
+    }
+    if (!best || !Number.isFinite(bestDelta) || bestDelta > 5000) return null;
+    return { call: best, matchedDeltaMs: bestDelta, matchedBy: 'timestamp' };
+}
+
 function rank(map, limit = 200) {
     return [...map.entries()]
         .map(([name, value]) => ({ name, ...finishMetric(value) }))
@@ -607,6 +652,18 @@ export class DCStatsServer {
                 if (req.method !== 'GET') return json(res, 405, { error: 'GET only' });
                 if (url.pathname === '/health') return json(res, 200, { ok: true, host: this.host, port: this.port });
                 if (url.pathname === '/api/ui-version') return json(res, 200, { version: await dashboardVersion() });
+                if (url.pathname === '/api/call-detail') {
+                    const ts = Number(url.searchParams.get('ts') || 0);
+                    const tool = (url.searchParams.get('tool') || '').trim().slice(0, 240);
+                    const eventId = (url.searchParams.get('eventId') || '').trim().slice(0, 240);
+                    const detail = await findCallDetail(ts, tool, eventId);
+                    if (!detail) return json(res, 404, { error: 'detail not found' });
+                    return json(res, 200, {
+                        ...detail.call,
+                        matchedDeltaMs: detail.matchedDeltaMs,
+                        matchedBy: detail.matchedBy
+                    });
+                }
                 if (url.pathname === '/api/summary') {
                     const days = parseDays(url);
                     const recovery = this.recoveryPromise ? await this.recoveryPromise : null;

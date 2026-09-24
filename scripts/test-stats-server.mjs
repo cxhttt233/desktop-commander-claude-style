@@ -156,6 +156,21 @@ await new Promise((resolve) => setTimeout(resolve, 100));
 data = await fetch('http://127.0.0.1:17991/api/summary?days=7').then((r) => r.json());
 assert.equal(data.range.calls, 8, 'tool usage should still be recorded when the dashboard server flag is absent');
 
+// Call detail must see history appended by another MCP process after the stats server started.
+const liveDetailTs = new Date(now + 2500).toISOString();
+const liveDetailMeter = { sessionStarted: now + 2400, calls: 1 };
+await fs.appendFile(path.join(historyDir, 'tool-history.jsonl'), JSON.stringify({
+  timestamp: liveDetailTs,
+  toolName: 'read_file',
+  arguments: { path: 'live-detail-after-start.txt' },
+  output: { content: [{ type: 'text', text: 'fresh detail' }], _meta: { dcTokenMeter: liveDetailMeter } },
+  duration: 42
+}) + '\n', 'utf8');
+const detailEventId = 'm:' + liveDetailMeter.sessionStarted + ':1';
+const liveDetail = await fetch('http://127.0.0.1:17991/api/call-detail?ts=' + encodeURIComponent(Date.parse(liveDetailTs)) + '&tool=read_file&eventId=' + encodeURIComponent(detailEventId)).then((r) => r.json());
+assert.equal(liveDetail.arguments?.path, 'live-detail-after-start.txt', 'detail endpoint should read newly appended shared history');
+assert.equal(liveDetail.matchedBy, 'eventId', 'detail endpoint should prefer exact event id matching');
+
 console.log('STATS_TEST_OK', JSON.stringify({
   address: dcStats.server.address().address,
   calls: data.range.calls,
