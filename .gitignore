@@ -3,3 +3,11 @@ claude-spinner-verbs.json
 *.before-*
 .DS_Store
 Thumbs.db
+# Local-only dashboard validation artifacts
+docs/WORK_MEMORY.md
+scripts/_rank_browser_profile/
+scripts/_rank_dom.html
+scripts/_17891_dashboard_*.png
+scripts/_check_temporal_rank.js
+scripts/_validate_17891.js
+scripts/__pycache__/
