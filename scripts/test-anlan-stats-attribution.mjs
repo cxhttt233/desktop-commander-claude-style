@@ -1,0 +1,11 @@
+import os from 'node:os';
+import path from 'node:path';
+import { readFileSync } from 'node:fs';
+const now=new Date();
+const day=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
+const file=path.join(process.env.LOCALAPPDATA,'DesktopCommander','stats','traffic-'+day+'.jsonl');
+const rows=readFileSync(file,'utf8').split(/\r?\n/).filter(Boolean).map(s=>{try{return JSON.parse(s)}catch{return null}}).filter(Boolean);
+const matched=rows.filter(x=>x.taskLabel==='隧道子任务并发隔离测试');
+console.log('ANLAN_AGENT_ATTRIBUTION_'+(matched.length>0?'OK':'MISSING'));
+console.log('attributed_calls='+matched.length);
+console.log('total_today_calls='+rows.length);

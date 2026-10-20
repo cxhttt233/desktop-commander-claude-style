@@ -26,6 +26,13 @@ It adds a compact Claude Code-inspired terminal status line, Desktop Commander t
 - Gateway mode is opt-in per real device, so other physical/VM Desktop Commander devices keep their normal behavior.
 - Optional local statistics dashboard binds only to `127.0.0.1:17891` and stores append-only daily JSONL under `%LOCALAPPDATA%\DesktopCommander\stats`; no external database is required.
 
+## OpenAI Tunnel local mode (no Remote MCP quota)
+
+The OpenAI Tunnel can expose the existing patched DC tools through `scripts/anlan-mcp-broker.mjs`.
+This preserves the 26 native tools and adds `agent_create`, `agent_call`, `agent_list`, and `agent_close` for explicit, task-isolated local subprocesses. A separate `anlan-local-stats.mjs` process serves the original 17891 dashboard, and each child call is attributed to its task in the same traffic store. ChatGPT conversation IDs are not automatically assumed, so per-conversation isolation requires selecting an `agent_id` explicitly. The Remote auto-spawn mode below remains unchanged.
+
+See [OpenAI Tunnel local setup and tests](docs/OPENAI_TUNNEL_LOCAL_DC.md). The repository BAT is a template with no real API Key or Tunnel ID. Do not publish credentials.
+
 ## Auto-spawn mode
 
 Enable it only on the Desktop Commander instance you want to act as the entry gateway:
