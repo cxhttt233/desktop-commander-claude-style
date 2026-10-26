@@ -6,7 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
-const packageRoot = path.join(process.env.LOCALAPPDATA || '', 'DesktopCommander', 'node_modules', '@wonderwhy-er', 'desktop-commander');
+// One broker implementation for both Windows and Linux. Resolve the platform-specific
+// Desktop Commander installation in the launcher, not in a forked broker file.
+const packageRoot = process.env.ANLAN_DC_PACKAGE_ROOT || path.join(process.env.LOCALAPPDATA || '', 'DesktopCommander', 'node_modules', '@wonderwhy-er', 'desktop-commander');
 const req = createRequire(path.join(packageRoot, 'package.json'));
 const sdk = async (name) => import(pathToFileURL(req.resolve('@modelcontextprotocol/sdk/' + name)).href);
 const [{ Server }, { StdioServerTransport }, { Client }, { StdioClientTransport }, types] = await Promise.all([
@@ -16,7 +18,10 @@ const { ListToolsRequestSchema, CallToolRequestSchema } = types;
 const entry = path.join(packageRoot, 'dist', 'index.js');
 const log = (message) => process.stderr.write('[Anlan broker] ' + message + '\n');
 const MAX_AGENTS = Math.max(1, Math.min(12, Number(process.env.ANLAN_MAX_AGENTS || 6)));
-const IDLE_MS = 24 * 60 * 60 * 1000;
+const IDLE_MS = Math.max(60_000, Number(process.env.ANLAN_AGENT_IDLE_MS || 24 * 60 * 60 * 1000));
+const DISCOVERY_MODE = process.env.ANLAN_DISCOVERY_MODE === 'minimal' ? 'minimal' : 'full';
+// Windows runs a separate 17891 stats process; Linux hosts stats in the main DC.
+const MAIN_STATS_SERVER = process.env.ANLAN_DC_MAIN_STATS_SERVER === 'true';
 const agents = new Map();
 let main;
 let toolSchemas = [];
@@ -28,7 +33,7 @@ const result = (body, isError = false) => ({
 
 async function newDcClient({ agentId = null, taskLabel = null } = {}) {
   const client = new Client({ name: 'anlan-dc-broker', version: '1.0.0' }, { capabilities: {} });
-  const env = { ...process.env, DC_STATS_SERVER: 'false', DC_AUTO_SPAWN: 'false' };
+  const env = { ...process.env, DC_STATS_SERVER: !agentId && MAIN_STATS_SERVER ? 'true' : 'false', DC_AUTO_SPAWN: 'false' };
   // The Tunnel's control-plane credential must never be propagated to DC shell subprocesses.
   for (const key of ['CONTROL_PLANE_API_KEY', 'CONTROL_PLANE_TUNNEL_ID', 'OPENAI_API_KEY']) delete env[key];
   if (process.env.DC_WORKSPACE_ROOT) env.DC_WORKSPACE_ROOT = process.env.DC_WORKSPACE_ROOT;
@@ -141,11 +146,20 @@ const initialList = await main.client.listTools();
 toolSchemas = initialList.tools;
 log('main DC ready; tools=' + toolSchemas.length);
 const server = new Server({ name: 'anlan-local-dc', version: '1.0.0' }, { capabilities: { tools: {} } });
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...toolSchemas, ...helperTools] }));
+const allTools = [...toolSchemas, ...helperTools];
+const exposedTools = DISCOVERY_MODE === 'minimal'
+  ? allTools.filter(tool => tool.name === 'get_config' || tool.name === 'agent_list')
+  : allTools;
+if (DISCOVERY_MODE === 'minimal' && exposedTools.length !== 2)
+  throw new Error('Minimal discovery requires exactly get_config and agent_list');
+log('discovery mode=' + DISCOVERY_MODE + '; exposed tools=' + exposedTools.length);
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: exposedTools }));
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const name = request.params.name;
   const args = request.params.arguments || {};
   try {
+    if (!exposedTools.some(tool => tool.name === name))
+      return result('Tool unavailable in ' + DISCOVERY_MODE + ' discovery mode: ' + name, true);
     if (helperTools.some(x => x.name === name)) return await executeHelper(name, args);
     if (!toolSchemas.some(x => x.name === name)) return result('Unknown tool: ' + name, true);
     return await main.client.callTool({ name, arguments: args, ...(request.params._meta ? { _meta: request.params._meta } : {}) });
