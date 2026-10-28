@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { guiTools, executeGuiTool } from './anlan-gui-winapp.mjs';
+import { withLocalDcGuidance } from './anlan-execution-policy.mjs';
 
 // One broker implementation for both Windows and Linux. Resolve the platform-specific
 // Desktop Commander installation in the launcher, not in a forked broker file.
@@ -148,7 +149,9 @@ toolSchemas = initialList.tools;
 log('main DC ready; tools=' + toolSchemas.length);
 const server = new Server({ name: 'anlan-local-dc', version: '1.0.0' }, { capabilities: { tools: {} } });
 const enabledGuiTools = process.platform === 'win32' && process.env.ANLAN_GUI_ENABLED !== 'false' ? guiTools : [];
-const allTools = [...toolSchemas, ...helperTools, ...enabledGuiTools];
+// Apply a small, discoverable operator policy to advertised tool descriptions.
+// Keep the native DC schemas and underlying execution exactly unchanged.
+const allTools = [...toolSchemas, ...helperTools, ...enabledGuiTools].map(withLocalDcGuidance);
 const exposedTools = DISCOVERY_MODE === 'minimal'
   ? allTools.filter(tool => tool.name === 'get_config' || tool.name === 'agent_list')
   : allTools;

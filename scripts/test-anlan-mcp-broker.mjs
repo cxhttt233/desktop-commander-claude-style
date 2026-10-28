@@ -13,7 +13,12 @@ const transport = new StdioClientTransport({command:process.execPath,args:[broke
 const str=(r)=>r?.content?.find(c=>c.type==='text')?.text || '';
 try{
   await client.connect(transport);
-  const tools=(await client.listTools()).tools.map(t=>t.name);
+  const discovered=(await client.listTools()).tools;
+  const tools=discovered.map(t=>t.name);
+  const description=name=>discovered.find(t=>t.name===name)?.description || '';
+  assert(description('start_process').includes('API/SDK'));
+  assert.match(description('start_process'), /Verify the real outcome/);
+  assert(description('get_config').includes('Prefer API/CLI'));
   assert(tools.includes('get_config') && tools.includes('agent_create') && tools.includes('agent_call'));
   console.log('DISCOVERY_OK tools='+tools.length);
   const cfg=await client.callTool({name:'get_config',arguments:{}});
@@ -21,6 +26,8 @@ try{
   console.log('MAIN_CALL_OK');
   if (process.platform === 'win32') {
     for (const gui of ['gui_status','gui_windows','gui_inspect','gui_action','gui_screenshot','gui_batch']) assert(tools.includes(gui), 'missing GUI tool: '+gui);
+    assert.match(description('gui_screenshot'), /LAST-RESORT VISUAL FALLBACK/);
+    assert.match(description('gui_batch'), /remote round trips/);
     const guiStatus = await client.callTool({name:'gui_status',arguments:{}});
     const status = JSON.parse(str(guiStatus));
     assert.equal(status.available, true, 'WinApp CLI missing');

@@ -33,6 +33,10 @@ This preserves the 26 native tools and adds `agent_create`, `agent_call`, `agent
 
 See [OpenAI Tunnel local setup and tests](docs/OPENAI_TUNNEL_LOCAL_DC.md). The repository BAT is a template with no real API Key or Tunnel ID. Do not publish credentials.
 
+### Local DC agent execution policy
+
+The Broker adds lightweight workflow guidance to its advertised MCP tool descriptions: prefer authorized API/SDK, then CLI/structured data, then Windows UIA for truly interactive desktop tasks, with screenshots/vision only as a fallback or for explicitly visual work. Verify the actual result via UIA readback or files/logs/data instead of screenshotting by default. Use `gui_batch` to minimize repeated Tunnel calls. This is advisory metadata, not a restriction or change to any native Desktop Commander behavior.
+
 ### Windows GUI automation (optional)
 
 The same local broker also exposes six Windows-only GUI tools (`gui_status`, `gui_windows`, `gui_inspect`, `gui_action`, `gui_screenshot`, `gui_batch`) powered by Microsoft's WinApp CLI/UI Automation. `gui_batch` executes up to eight GUI steps with one RemotePC request, cutting repeated MCP/Tunnel round trips. They use the existing Tunnel/DC connection, not a second MCP service. UIA inspection and direct element operations are preferred; screenshots are an optional fallback. Install WinApp CLI locally and restart the broker to refresh tool discovery. See [Windows GUI integration and tests](docs/WINDOWS_GUI_LOCAL_DC.md).

@@ -36,6 +36,18 @@ Set ANLAN_GUI_ENABLED=false to omit these tools. On Linux and macOS the broker n
 
 After updating the broker code, restart the existing Tunnel/Broker process once and refresh the plugin's tool discovery. Do not start a second Tunnel with the same ID. Existing DC tools and local statistics stay intact.
 
+## Agent execution priority (advertised by the Broker)
+
+The Local DC broker appends this policy to its MCP tool descriptions (including `start_process`, `gui_windows`, `gui_batch` and `gui_screenshot`), so agents can discover it without reading this file:
+
+1. Prefer an authorized direct API/SDK for non-visual work when suitable.
+2. Prefer CLI/shell or structured file/data operations over GUI when the same objective can be completed reliably.
+3. For necessary desktop interaction, prefer UI Automation (`gui_action` invoke/set-value/get-value with known selectors); use keyboard/clipboard only when the UIA editing capability is incomplete.
+4. Screenshot + model vision **only** for actual visual inspection, inaccessible/self-drawn controls, or unresolved UIA/CLI ambiguity.
+5. Verify the real outcome using UIA readback, files, logs, process/data state, or other structured evidence. A successful tool return by itself is not proof the task succeeded. Avoid routine screenshots to confirm saved files, program output, or calculations.
+
+Use `gui_batch` for multiple known steps in one window to reduce Tunnel round trips; use a narrow UIA selector instead of repeatedly scanning a huge control tree. The priority is *guidance*, not a ban: if the user explicitly asks for a GUI demonstration or visual comparison, GUI and screenshot operations remain available.
+
 ## Agent workflow
 
 1. gui_status({}) -> available: true.
@@ -43,8 +55,8 @@ After updating the broker code, restart the existing Tunnel/Broker process once 
 3. gui_inspect({hwnd:"123456",interactive:true}) -> discover element selector.
 4. gui_action({hwnd:"123456",action:"set-value",selector:"Edit",value:"Hello"}).
 5. gui_action({hwnd:"123456",action:"get-value",selector:"Edit"}) -> verify result.
-6. gui_screenshot({hwnd:"123456",include_image:false}) -> saved PNG path.
-7. Use include_image:true only when model visual analysis is necessary.
+6. Confirm the real outcome via gui_action/get-value or a CLI/file/log check where available.
+7. If and only if visual verification is actually needed, call gui_screenshot; set include_image:true only when model vision is necessary.
 
 Screenshots save under C:\Code\tools\winappcli\captures, outside the Git repository.
 Default screenshots capture a specified window and related dialog, not the entire desktop.
@@ -61,8 +73,7 @@ For example, a dynamic selector can be carried safely from a previous *unique* U
   "steps": [
     {"tool":"gui_action","action":"search","selector":"文件"},
     {"tool":"gui_action","action":"invoke","selector_from_step":0},
-    {"tool":"gui_inspect","interactive":true},
-    {"tool":"gui_screenshot","include_image":false}
+    {"tool":"gui_inspect","interactive":true}
   ]
 }
 ```
