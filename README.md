@@ -35,7 +35,7 @@ See [OpenAI Tunnel local setup and tests](docs/OPENAI_TUNNEL_LOCAL_DC.md). The r
 
 ### Windows GUI automation (optional)
 
-The same local broker also exposes five Windows-only GUI tools (`gui_status`, `gui_windows`, `gui_inspect`, `gui_action`, `gui_screenshot`) powered by Microsoft's WinApp CLI/UI Automation. They use the existing Tunnel/DC connection, not a second MCP service. UIA inspection and direct element operations are preferred; screenshots are an optional fallback. Install WinApp CLI locally and restart the broker to refresh tool discovery. See [Windows GUI integration and tests](docs/WINDOWS_GUI_LOCAL_DC.md).
+The same local broker also exposes six Windows-only GUI tools (`gui_status`, `gui_windows`, `gui_inspect`, `gui_action`, `gui_screenshot`, `gui_batch`) powered by Microsoft's WinApp CLI/UI Automation. `gui_batch` executes up to eight GUI steps with one RemotePC request, cutting repeated MCP/Tunnel round trips. They use the existing Tunnel/DC connection, not a second MCP service. UIA inspection and direct element operations are preferred; screenshots are an optional fallback. Install WinApp CLI locally and restart the broker to refresh tool discovery. See [Windows GUI integration and tests](docs/WINDOWS_GUI_LOCAL_DC.md).
 
 ## Auto-spawn mode
 

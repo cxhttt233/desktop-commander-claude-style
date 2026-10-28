@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { guiTools, buildGuiArgs, executeGuiTool } from './anlan-gui-winapp.mjs';
+import { guiTools, buildGuiArgs, executeGuiTool, validateGuiBatch } from './anlan-gui-winapp.mjs';
 
-test('five compact GUI tools are available without adding another MCP connection', () => {
-  assert.deepEqual(guiTools.map(x => x.name), ['gui_status', 'gui_windows', 'gui_inspect', 'gui_action', 'gui_screenshot']);
+test('six compact GUI tools are available without adding another MCP connection', () => {
+  assert.deepEqual(guiTools.map(x => x.name), ['gui_status', 'gui_windows', 'gui_inspect', 'gui_action', 'gui_screenshot', 'gui_batch']);
 });
 test('windows enumeration supports optional app filter', () => {
   assert.deepEqual(buildGuiArgs('gui_windows'), ['ui', 'list-windows', '--json']);

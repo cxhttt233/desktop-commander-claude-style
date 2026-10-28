@@ -3,7 +3,7 @@
 ## What is added
 
 The existing OpenAI Tunnel -> Anlan MCP broker -> Desktop Commander connection is unchanged.
-On Windows the broker additionally exposes five native tools, with no extra MCP instance:
+On Windows the broker additionally exposes six native tools, with no extra MCP instance:
 
 | Tool | Purpose |
 | --- | --- |
@@ -12,6 +12,7 @@ On Windows the broker additionally exposes five native tools, with no extra MCP 
 | gui_inspect | Read UI Automation tree; default interactive elements only |
 | gui_action | Search, read values, invoke, set values, click, send keys, wait for state |
 | gui_screenshot | Capture a specific app/window; optional image content |
+| gui_batch | Execute 1–8 GUI steps sequentially in a single RemotePC call, stop on error |
 
 The broker passes fixed, validated arguments directly to Microsoft's native CLI via Node spawn with shell=false.
 Only the winapp ui command family is exposed; it cannot run arbitrary winapp/package/shell commands.
@@ -47,6 +48,28 @@ After updating the broker code, restart the existing Tunnel/Broker process once 
 
 Screenshots save under C:\Code\tools\winappcli\captures, outside the Git repository.
 Default screenshots capture a specified window and related dialog, not the entire desktop.
+
+## GUI batch (one remote call, multiple local steps)
+
+The batch tool reduces the number of round trips across ChatGPT -> Tunnel -> Local DC. The caller supplies **one app or HWND** and 1–8 predeclared steps. Actions are executed in order with per-step execution times; the batch stops at the first error. It does not interpret JavaScript or shell code.
+
+For example, a dynamic selector can be carried safely from a previous *unique* UIA search (search must return exactly one match):
+
+```json
+{
+  "hwnd": "123456",
+  "steps": [
+    {"tool":"gui_action","action":"search","selector":"文件"},
+    {"tool":"gui_action","action":"invoke","selector_from_step":0},
+    {"tool":"gui_inspect","interactive":true},
+    {"tool":"gui_screenshot","include_image":false}
+  ]
+}
+```
+
+The screenshot remains a local PNG unless the **final** step explicitly requests `include_image:true`. To prevent oversized responses, the batch limits inspect results to 30 elements per window and search results to 15 matches in its text output; dynamic selector resolution still uses the full internal search result. Batches cannot change the target window or run arbitrary shell commands. Default duration budget: 45s, maximum 90s, checked before each step (in-progress steps finish normally).
+
+**Measured on LinkRuboh (Windows 11 + Notepad, 2026-10-28):** the four-step search -> invoke -> inspect -> screenshot batch completed locally in **4.81 seconds** (1.07+0.87+1.32+1.55s). This saves remote round trips; it is not a claim that UIA's individual native operations have become faster.
 
 ## Limits and safety
 

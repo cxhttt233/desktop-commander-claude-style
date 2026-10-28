@@ -20,13 +20,22 @@ try{
   assert(!cfg.isError,'main get_config error '+str(cfg));
   console.log('MAIN_CALL_OK');
   if (process.platform === 'win32') {
-    for (const gui of ['gui_status','gui_windows','gui_inspect','gui_action','gui_screenshot']) assert(tools.includes(gui), 'missing GUI tool: '+gui);
+    for (const gui of ['gui_status','gui_windows','gui_inspect','gui_action','gui_screenshot','gui_batch']) assert(tools.includes(gui), 'missing GUI tool: '+gui);
     const guiStatus = await client.callTool({name:'gui_status',arguments:{}});
     const status = JSON.parse(str(guiStatus));
     assert.equal(status.available, true, 'WinApp CLI missing');
     const windows = await client.callTool({name:'gui_windows',arguments:{}});
     assert(!windows.isError, 'gui_windows error '+str(windows));
-    assert(Array.isArray(JSON.parse(str(windows)).data), 'expected window list');
+    const desktopWindows=JSON.parse(str(windows)).data;
+    assert(Array.isArray(desktopWindows), 'expected window list');
+    const notepad=desktopWindows.find(w => w.processName === 'Notepad' && w.title);
+    if (notepad) {
+      const batch=await client.callTool({name:'gui_batch',arguments:{hwnd:String(notepad.hwnd),steps:[{tool:'gui_inspect',interactive:true}]}});
+      assert(!batch.isError, 'gui_batch error '+str(batch));
+      const answer=JSON.parse(str(batch));
+      assert.equal(answer.completed_steps,1);
+      console.log('GUI_BATCH_BROKER_OK duration_ms='+answer.duration_ms);
+    }
     console.log('GUI_BROKER_OK');
   }
   const c=await client.callTool({name:'agent_create',arguments:{task_label:'隧道子任务并发隔离测试'}});
