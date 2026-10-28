@@ -5,6 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+import { guiTools, executeGuiTool } from './anlan-gui-winapp.mjs';
 
 // One broker implementation for both Windows and Linux. Resolve the platform-specific
 // Desktop Commander installation in the launcher, not in a forked broker file.
@@ -146,7 +147,8 @@ const initialList = await main.client.listTools();
 toolSchemas = initialList.tools;
 log('main DC ready; tools=' + toolSchemas.length);
 const server = new Server({ name: 'anlan-local-dc', version: '1.0.0' }, { capabilities: { tools: {} } });
-const allTools = [...toolSchemas, ...helperTools];
+const enabledGuiTools = process.platform === 'win32' && process.env.ANLAN_GUI_ENABLED !== 'false' ? guiTools : [];
+const allTools = [...toolSchemas, ...helperTools, ...enabledGuiTools];
 const exposedTools = DISCOVERY_MODE === 'minimal'
   ? allTools.filter(tool => tool.name === 'get_config' || tool.name === 'agent_list')
   : allTools;
@@ -160,6 +162,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     if (!exposedTools.some(tool => tool.name === name))
       return result('Tool unavailable in ' + DISCOVERY_MODE + ' discovery mode: ' + name, true);
+    if (enabledGuiTools.some(x => x.name === name)) return await executeGuiTool(name, args);
     if (helperTools.some(x => x.name === name)) return await executeHelper(name, args);
     if (!toolSchemas.some(x => x.name === name)) return result('Unknown tool: ' + name, true);
     return await main.client.callTool({ name, arguments: args, ...(request.params._meta ? { _meta: request.params._meta } : {}) });

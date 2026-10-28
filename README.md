@@ -33,6 +33,10 @@ This preserves the 26 native tools and adds `agent_create`, `agent_call`, `agent
 
 See [OpenAI Tunnel local setup and tests](docs/OPENAI_TUNNEL_LOCAL_DC.md). The repository BAT is a template with no real API Key or Tunnel ID. Do not publish credentials.
 
+### Windows GUI automation (optional)
+
+The same local broker also exposes five Windows-only GUI tools (`gui_status`, `gui_windows`, `gui_inspect`, `gui_action`, `gui_screenshot`) powered by Microsoft's WinApp CLI/UI Automation. They use the existing Tunnel/DC connection, not a second MCP service. UIA inspection and direct element operations are preferred; screenshots are an optional fallback. Install WinApp CLI locally and restart the broker to refresh tool discovery. See [Windows GUI integration and tests](docs/WINDOWS_GUI_LOCAL_DC.md).
+
 ## Auto-spawn mode
 
 Enable it only on the Desktop Commander instance you want to act as the entry gateway:
