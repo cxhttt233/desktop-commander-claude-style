@@ -16,9 +16,9 @@ try{
   const discovered=(await client.listTools()).tools;
   const tools=discovered.map(t=>t.name);
   const description=name=>discovered.find(t=>t.name===name)?.description || '';
-  assert(description('start_process').includes('API/SDK'));
-  assert.match(description('start_process'), /Verify the real outcome/);
-  assert(description('get_config').includes('Prefer API/CLI'));
+  assert(description('start_process').includes('no fixed technology priority'));
+  assert.match(description('start_process'), /Verify the real result/);
+  assert(description('get_config').includes('no fixed API/CLI/GUI hierarchy'));
   assert(tools.includes('get_config') && tools.includes('agent_create') && tools.includes('agent_call'));
   console.log('DISCOVERY_OK tools='+tools.length);
   const cfg=await client.callTool({name:'get_config',arguments:{}});
@@ -26,7 +26,7 @@ try{
   console.log('MAIN_CALL_OK');
   if (process.platform === 'win32') {
     for (const gui of ['gui_status','gui_windows','gui_inspect','gui_action','gui_screenshot','gui_batch']) assert(tools.includes(gui), 'missing GUI tool: '+gui);
-    assert.match(description('gui_screenshot'), /LAST-RESORT VISUAL FALLBACK/);
+    assert.match(description('gui_screenshot'), /VISUAL FALLBACK/);
     assert.match(description('gui_batch'), /remote round trips/);
     const guiStatus = await client.callTool({name:'gui_status',arguments:{}});
     const status = JSON.parse(str(guiStatus));

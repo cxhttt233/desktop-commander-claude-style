@@ -36,17 +36,19 @@ Set ANLAN_GUI_ENABLED=false to omit these tools. On Linux and macOS the broker n
 
 After updating the broker code, restart the existing Tunnel/Broker process once and refresh the plugin's tool discovery. Do not start a second Tunnel with the same ID. Existing DC tools and local statistics stay intact.
 
-## Agent execution priority (advertised by the Broker)
+## Agent execution guidance (advertised by the Broker)
 
-The Local DC broker appends this policy to its MCP tool descriptions (including `start_process`, `gui_windows`, `gui_batch` and `gui_screenshot`), so agents can discover it without reading this file:
+The Broker appends this guidance to its MCP tool descriptions (including `start_process`, `gui_windows`, `gui_batch` and `gui_screenshot`), so agents see it during tool discovery.
 
-1. Prefer an authorized direct API/SDK for non-visual work when suitable.
-2. Prefer CLI/shell or structured file/data operations over GUI when the same objective can be completed reliably.
-3. For necessary desktop interaction, prefer UI Automation (`gui_action` invoke/set-value/get-value with known selectors); use keyboard/clipboard only when the UIA editing capability is incomplete.
-4. Screenshot + model vision **only** for actual visual inspection, inaccessible/self-drawn controls, or unresolved UIA/CLI ambiguity.
-5. Verify the real outcome using UIA readback, files, logs, process/data state, or other structured evidence. A successful tool return by itself is not proof the task succeeded. Avoid routine screenshots to confirm saved files, program output, or calculations.
+**There is no fixed API > CLI > GUI hierarchy. Choose the method that reliably meets the user's intent with the fewest calls and least execution overhead.** Do not go hunting for an API, or replace a requested GUI demonstration with a backend operation merely because it is technically available.
 
-Use `gui_batch` for multiple known steps in one window to reduce Tunnel round trips; use a narrow UIA selector instead of repeatedly scanning a huge control tree. The priority is *guidance*, not a ban: if the user explicitly asks for a GUI demonstration or visual comparison, GUI and screenshot operations remain available.
+- For routine local file, process, log and data work, existing CLI/structured DC tools are usually effective.
+- If interacting with an actual desktop application is part of the task, operate its UI. Prefer known UI Automation controls (`invoke`/`set-value`/`get-value`), with keyboard or clipboard fallback for inaccessible editors.
+- Avoid unnecessary screenshot capture and visual reasoning. Use them for visual tasks, inaccessible controls or unresolved ambiguity; they are not mandatory for every GUI step.
+- **Verify the actual result**, not just a tool's success status. Prefer UIA readback, file contents, logs, process/data state or another reliable structured check.
+- Reduce repeated Tunnel calls with `gui_batch` and targeted UIA selectors; full control-tree scans can also be expensive.
+
+This is advisory metadata, not a new constraint or a change to Desktop Commander's execution permissions.
 
 ## Agent workflow
 

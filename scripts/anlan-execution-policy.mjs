@@ -1,26 +1,26 @@
-// Agent execution guidance added only to the broker's advertised MCP tool descriptions.
-// Does not change installed Desktop Commander tools, tool arguments, or routing.
+// Agent execution guidance appended to MCP tool descriptions by the Local DC broker.
+// Advisory only: do not modify native Desktop Commander schemas or routing.
+// Optimize successful task completion rather than ranking technologies.
 export const LOCAL_DC_EXECUTION_POLICY = [
-  'Local DC execution priority (unless the task explicitly requires GUI/visual interaction):',
-  '1. Prefer an existing direct API/SDK when appropriate and authorized.',
-  '2. Prefer a CLI/shell/structured file or data operation for non-visual work.',
-  '3. If desktop interaction is actually required, prefer Windows UI Automation (UIA): target a known window/control and invoke/set-value/get-value; use keyboard/clipboard only when UIA cannot edit the control reliably.',
-  '4. Screenshots + visual reasoning are a fallback for inaccessible/self-drawn controls, ambiguous UIA results, or tasks that explicitly require visual verification.',
-  'Verify the real outcome, not just the tool exit status: read the actual file/data/log/OS state or UIA value. Do not take routine screenshots just to confirm a file was saved, a process ran, or a calculation succeeded.',
-  'Use gui_batch for several known steps on one window to reduce remote round trips. Use narrow selectors and shallow inspection when possible; a large UIA tree can be slower than a screenshot.',
-  'Respect user intent and existing permissions. Never assume shell/clipboard is safe for destructive or privileged changes.'
+  'Local DC execution rule: choose the lowest-overhead reliable method that actually fulfills the user intent; there is no fixed technology priority.',
+  'For ordinary local files, processes, logs and data, use available CLI/structured operations when efficient and sufficient. Do not search for, build or favor an interface merely to satisfy a priority slogan.',
+  'When the user requests desktop app interaction or a GUI demonstration, actually operate the GUI. Prefer known Windows UI Automation (UIA) controls and invoke/set-value/get-value; fall back to keyboard or clipboard when direct UIA editing is unreliable.',
+  'Avoid unnecessary screenshots and visual reasoning. Use screenshots when the task is visual, UIA cannot describe a relevant control/state, or structured verification is inconclusive.',
+  'Verify the real result, not merely a successful tool call: read UIA state, files/data/logs/process state, or other structured evidence where possible. Do not screenshot routinely to confirm a file was saved or a calculation succeeded.',
+  'Minimize remote round trips: batch known same-window actions with gui_batch; use targeted selectors instead of costly full accessibility-tree scans.',
+  'Respect authorized scope and existing permissions; never assume CLI/clipboard operations are permitted for destructive or privileged changes.'
 ].join(' ');
 
 const compactGuidance = {
-  get_config: 'Agent workflow guidance: Prefer API/CLI for nonvisual tasks, Windows UIA for necessary desktop interaction, and screenshots only for visual tasks or unresolved ambiguity. Verify state through files/logs/data/UIA rather than image when feasible.',
+  get_config: 'Choose the most reliable low-overhead way to achieve the requested task; no fixed API/CLI/GUI hierarchy. For desktop controls use UIA where practical; verify via structured state instead of unnecessary screenshots.',
   start_process: LOCAL_DC_EXECUTION_POLICY,
-  agent_call: 'When selecting child DC tools: prefer API/CLI for nonvisual tasks; GUI UIA only if needed, screenshots last. Independently verify resulting state.',
-  gui_status: 'Prioritize API/CLI over GUI when the task does not require desktop interaction; prefer UIA over screenshots for desktop controls.',
+  agent_call: 'Select tools according to user intent, reliability, fewest remote calls and execution cost, not a fixed API-first hierarchy. For GUI use UIA; verify actual outcome; screenshot only as visual fallback.',
+  gui_status: 'Use GUI tools when desktop interaction is needed or specifically requested. Avoid screenshots by default when UIA or other structured verification is sufficient.',
   gui_windows: LOCAL_DC_EXECUTION_POLICY,
-  gui_inspect: 'Use only if GUI is needed; prefer known selectors or narrow-depth inspection and avoid repeated full-tree scans. Verify results via UIA readback or CLI/filesystem, not automatic screenshots.',
-  gui_action: 'Prefer UIA invoke/set-value/get-value on known controls, use keyboard/clipboard fallback only as needed. A successful invoke does not prove the intended task completed: verify the resulting UIA value or actual file/data/log.',
-  gui_batch: 'Batch known actions on the SAME window to reduce remote round trips. Prefer UIA reads or CLI/file verification, not automatically adding a screenshot after actions. Failed steps stop the batch; success still needs outcome verification.',
-  gui_screenshot: 'LAST-RESORT VISUAL FALLBACK: use only when actual visual appearance is requested, UIA cannot expose the relevant control/state, or nonvisual verification is inconclusive. Do NOT screenshot routinely to confirm saved files, commands, calculations, or other outcomes verifiable via UIA/files/logs. Use include_image only when model vision is genuinely needed.'
+  gui_inspect: 'Prefer known selectors or narrow-depth UIA inspection. Avoid full-tree scans unless necessary; verify with UIA readback or files/logs instead of automatic screenshots.',
+  gui_action: 'Prefer UIA invoke/set-value/get-value for known controls; fall back to keyboard/clipboard only as needed. Successful tool invocation is not proof of final success; verify actual UIA state or file/data/log.',
+  gui_batch: 'Batch known same-window steps to reduce remote round trips. Verify results via UIA readback or other structured state; do not append screenshots by habit. Stop on failure.',
+  gui_screenshot: 'VISUAL FALLBACK: use for explicitly visual tasks, inaccessible/self-drawn controls, or unresolved ambiguity. Do NOT screenshot routinely to confirm saved files, commands or calculations when UIA/files/logs suffice. Include image pixels only when model vision is actually needed.'
 };
 
 export function withLocalDcGuidance(tool) {

@@ -35,7 +35,7 @@ See [OpenAI Tunnel local setup and tests](docs/OPENAI_TUNNEL_LOCAL_DC.md). The r
 
 ### Local DC agent execution policy
 
-The Broker adds lightweight workflow guidance to its advertised MCP tool descriptions: prefer authorized API/SDK, then CLI/structured data, then Windows UIA for truly interactive desktop tasks, with screenshots/vision only as a fallback or for explicitly visual work. Verify the actual result via UIA readback or files/logs/data instead of screenshotting by default. Use `gui_batch` to minimize repeated Tunnel calls. This is advisory metadata, not a restriction or change to any native Desktop Commander behavior.
+The Broker adds lightweight workflow guidance to its advertised MCP tool descriptions. **There is no fixed API/CLI/GUI priority:** choose the reliable method that fulfills user intent with fewer calls and lower overhead. Existing CLI/file tools are effective for local data/process tasks; when GUI interaction is requested, use Windows UIA first and keyboard/clipboard as needed. Screenshots and vision are reserved for visual tasks or cases that cannot be reliably checked otherwise. Verify outcomes via UIA, files, logs or data rather than routine screenshots. Use `gui_batch` to minimize Tunnel round trips. This is advisory metadata, not a restriction or change to native Desktop Commander behavior.
 
 ### Windows GUI automation (optional)
 
